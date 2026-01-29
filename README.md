@@ -88,17 +88,12 @@ L'API sera accessible sur http://localhost:3000
 
 ## 📝 Variables d'Environnement
 
-### Frontend (.env)
-```
-VITE_API_BASE_URL=http://localhost:3000
-```
+**Ne jamais commiter de fichiers `.env` contenant de vraies clés.**
 
-### Backend (.env)
-```
-JWT_SECRET=your-super-secret-jwt-key
-MONGODB_URI=mongodb://localhost:27017/senpointage
-PORT=3000
-```
+- **Frontend** : copiez `frontend/.env.example` en `frontend/.env.local` et renseignez `VITE_API_BASE_URL` (ex. URL de votre API).
+- **Backend** : copiez `backend/env.example` en `backend/.env` et remplissez toutes les variables (MongoDB, JWT, Redis, etc.).
+
+Pour la liste complète et les instructions détaillées, consultez **[CONFIGURATION.md](CONFIGURATION.md)**.
 
 ## 🔗 Endpoints API Principaux
 
