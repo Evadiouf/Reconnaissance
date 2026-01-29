@@ -1,0 +1,61 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment variables (CRITICAL: Never commit these!)
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Sensitive data
+*.pem
+*.key
+*.cert
+secrets/
+credentials/
+
+# Git backups and cleanup scripts
+.git.backup*/
+.clean-and-reinit-git.sh
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Documentation files (project analysis and guides)
+ANALYSE_PROJET_COMPLETE.md
+DEBUG_INVITATION.md
+ANALYSE_PROJET.md
+ANALYSE_LIEN_POINTAGE_CAMERAS.md
+GUIDE_RECONNAISSANCE_FACIALE.md
+API_DOCUMENTATION.md
+TROUBLESHOOTING.md
+TRAINING_IMAGE_API_DOC.md
+frontend/ANALYSE_RAPPORTS.md
+frontend/GUIDE_SERVICES.md
+backend/CONFIGURATION_MAILJET.md
+backend/SUBSCRIPTION_API.md
+backend/src/filemanager/README.md

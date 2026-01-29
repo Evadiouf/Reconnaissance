@@ -1,0 +1,79 @@
+services:
+  # Service Backend NestJS
+  - type: web
+    name: senpointage-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    
+    # Variables d'environnement
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+        
+    # Variables d'environnement de base de données (à configurer dans Render)
+    envVarGroups:
+      - name: Database
+        envVars:
+          - key: MONGODB_URI
+            sync: false
+          - key: DATABASE_NAME
+            value: senpointage
+            
+    # Variables d'environnement de l'application (à configurer dans Render)
+    envVarGroups:
+      - name: App Config
+        envVars:
+          - key: JWT_SECRET
+            sync: false
+          - key: JWT_EXPIRES_IN
+            value: 7d
+          - key: FACE_RECOGNITION_API_URL
+            value: http://153.92.223.185:5001
+          - key: FACE_RECOGNITION_API_KEY
+            sync: false
+          - key: FRONTEND_URL
+            value: https://senpointage.naratechvision.com
+            
+    # Variables d'environnement email (à configurer dans Render)
+    envVarGroups:
+      - name: Email Config
+        envVars:
+          - key: MAILJET_API_KEY
+            sync: false
+          - key: MAILJET_API_SECRET
+            sync: false
+          - key: MAILJET_FROM_EMAIL
+            sync: false
+
+  # Service Frontend React
+  - type: web
+    name: senpointage-frontend
+    runtime: static
+    plan: free
+    buildCommand: cd frontend && npm run build
+    staticPublishPath: ./frontend/dist
+    autoDeploy: true
+    
+    # Routes pour le SPA React
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+        
+    # Variables d'environnement pour le frontend
+    envVars:
+      - key: VITE_API_URL
+        value: https://senpointage-backend.onrender.com
+        
+  # Service de base de données (si tu préfères Render au lieu de MongoDB Atlas)
+  # - type: pserv
+  #   name: senpointage-db
+  #   runtime: postgres
+  #   plan: free
+  #   databaseName: senpointage
+  #   user: senpointage
