@@ -1,74 +1,76 @@
+# Blueprint Render - SenPointage (Backend SANS Docker - Node.js uniquement)
+# À configurer dans le dashboard : Root Directory = "backend"
+# Build Command: npm install && npm run build
+# Start Command: npm run start:prod
+# Variables sensibles à saisir dans le dashboard Render
+
 services:
-  # Service Backend NestJS
+  # Service Backend NestJS (Node.js, pas Docker)
   - type: web
     name: senpointage-backend
-    runtime: docker
+    runtime: node
     plan: free
-    dockerfilePath: ./Dockerfile
-    healthCheckPath: /api/health
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
     autoDeploy: true
     
-    # Variables d'environnement
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3000
-        
-    # Variables d'environnement de base de données (à configurer dans Render)
-    envVarGroups:
-      - name: Database
-        envVars:
-          - key: MONGODB_URI
-            sync: false
-          - key: DATABASE_NAME
-            value: senpointage
-            
-    # Variables d'environnement de l'application (à configurer dans Render)
-    envVarGroups:
-      - name: App Config
-        envVars:
-          - key: JWT_SECRET
-            sync: false
-          - key: JWT_EXPIRES_IN
-            value: 7d
-          - key: FACE_RECOGNITION_API_URL
-            value: http://153.92.223.185:5001
-          - key: FACE_RECOGNITION_API_KEY
-            sync: false
-          - key: FRONTEND_URL
-            value: https://senpointage.naratechvision.com
-            
-    # Variables d'environnement email (à configurer dans Render)
-    envVarGroups:
-      - name: Email Config
-        envVars:
-          - key: MAILJET_API_KEY
-            sync: false
-          - key: MAILJET_API_SECRET
-            sync: false
-          - key: MAILJET_FROM_EMAIL
-            sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: MONGO_DB_NAME
+        value: sen_pointage
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        value: https://senpointage.naratechvision.com
+      - key: FRONTEND_RESET_PASSWORD_URL
+        value: https://senpointage.naratechvision.com/reinitialiser-mot-de-passe
+      - key: FACE_RECOGNITION_API_URL
+        value: http://153.92.223.185:5001
+      - key: FACE_RECOGNITION_API_KEY
+        sync: false
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        value: "6379"
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: REDIS_DB
+        value: "0"
+      - key: MAILJET_API_KEY
+        sync: false
+      - key: MAILJET_API_SECRET
+        sync: false
+      - key: MAILJET_FROM_EMAIL
+        sync: false
+      - key: MAILJET_FROM_NAME
+        value: Sen Pointage
 
-  # Service Frontend React
+  # Service Frontend React (Static Site)
   - type: web
     name: senpointage-frontend
     runtime: static
     plan: free
-    buildCommand: cd frontend && npm run build
-    staticPublishPath: ./frontend/dist
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
     autoDeploy: true
     
-    # Routes pour le SPA React
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
         
-    # Variables d'environnement pour le frontend
     envVars:
-      - key: VITE_API_URL
-        value: https://senpointage-backend.onrender.com
+      - key: VITE_API_BASE_URL
+        sync: false
         
   # Service de base de données (si tu préfères Render au lieu de MongoDB Atlas)
   # - type: pserv
