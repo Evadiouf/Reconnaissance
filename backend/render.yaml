@@ -1,6 +1,6 @@
 # Blueprint Render - SenPointage (Backend SANS Docker - Node.js uniquement)
 # À configurer dans le dashboard : Root Directory = "backend"
-# Build Command: npm install && npm run build
+# Build Command: npm install --include=dev && npm run build
 # Start Command: npm run start:prod
 # Variables sensibles à saisir dans le dashboard Render
 
@@ -11,7 +11,8 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
+    # --include=dev nécessaire : sans ça, NODE_ENV=production fait ignorer devDependencies et "nest" (CLI) est absent
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /api/v1/health
     autoDeploy: true
