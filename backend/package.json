@@ -24,7 +24,8 @@
     "seed:settings": "ts-node -r tsconfig-paths/register src/seeds/seed-settings.ts",
     "seed:permissions": "ts-node -r tsconfig-paths/register src/seeds/seed-permissions.ts",
     "seed:roles": "ts-node -r tsconfig-paths/register src/seeds/seed-roles.ts",
-    "seed:company-types": "ts-node -r tsconfig-paths/register src/seeds/seed-company-types.ts"
+    "seed:company-types": "ts-node -r tsconfig-paths/register src/seeds/seed-company-types.ts",
+    "seed:company-types:standalone": "node scripts/seed-company-types-standalone.js"
   },
   "dependencies": {
     "@casl/ability": "^6.7.3",
