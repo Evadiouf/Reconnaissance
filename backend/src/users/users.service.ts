@@ -374,6 +374,12 @@ export class UsersService {
     return this.userModel.findOne({ email: email.toLowerCase() }).select('+password').exec();
   }
 
+  /** Retourne true si au moins un utilisateur a le rôle superadmin (pour bootstrap). */
+  async hasAnySuperadmin(): Promise<boolean> {
+    const exists = await this.userModel.exists({ roles: 'superadmin' }).exec();
+    return !!exists;
+  }
+
   async findById(id: string): Promise<User | null> {
     return this.userModel.findById(id).exec();
   }

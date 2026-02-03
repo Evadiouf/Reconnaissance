@@ -54,6 +54,11 @@ services:
         sync: false
       - key: MAILJET_FROM_NAME
         value: Sen Pointage
+      # Super admin : créé au 1er démarrage si aucun super admin en base (bootstrap)
+      - key: SUPERADMIN_EMAIL
+        sync: false
+      - key: SUPERADMIN_PASSWORD
+        sync: false
 
   # Service Frontend React (Static Site)
   - type: web
