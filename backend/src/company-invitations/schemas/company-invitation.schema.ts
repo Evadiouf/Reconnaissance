@@ -48,5 +48,4 @@ export class CompanyInvitation extends Document {
 export const CompanyInvitationSchema = SchemaFactory.createForClass(CompanyInvitation);
 
 CompanyInvitationSchema.index({ email: 1, status: 1 });
-CompanyInvitationSchema.index({ token: 1 });
-CompanyInvitationSchema.index({ company: 1 });
+// token et company ont déjà index: true dans @Prop

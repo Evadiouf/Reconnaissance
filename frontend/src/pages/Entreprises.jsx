@@ -1942,63 +1942,29 @@ function Entreprises() {
                   />
                 </div>
 
-                {/* Secteur (type d'entreprise) */}
+                {/* Secteur (type d'entreprise) - select natif pour affichage fiable dans le modal */}
                 <div className="flex flex-col gap-0.5">
                   <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
                     Secteur *
                   </label>
-                  <div className="relative z-50" ref={companyTypeDropdownRef}>
-                    <button
-                      ref={companyTypeButtonRef}
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsCompanyTypeDropdownOpen(!isCompanyTypeDropdownOpen);
-                      }}
-                      className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 flex justify-between items-center hover:bg-[#E5E9E9] transition-colors"
-                    >
-                      <span className="font-instrument text-base text-[#5A6565] leading-[26px]">
-                        {companyTypes.find((t) => (t._id || t.id) === inviteRHFormData.typeId)?.name || 'Sélectionnez un secteur'}
-                      </span>
-                      <ArrowDownIcon />
-                    </button>
-                    
-                    {isCompanyTypeDropdownOpen && (
-                      <div
-                        className="bg-white border-2 border-[#0389A6] rounded-2xl shadow-2xl overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                        onWheel={(e) => e.stopPropagation()}
-                        style={{
-                          position: 'fixed',
-                          top: companyTypeDropdownPos.top,
-                          left: companyTypeDropdownPos.left,
-                          width: companyTypeDropdownPos.width,
-                          maxHeight: '300px',
-                          zIndex: 10050,
-                          overflowY: 'auto',
-                        }}
-                      >
-                        <div className="flex flex-col">
-                          {(companyTypes.length > 0 ? companyTypes : []).map((ct) => (
-                            <button
-                              key={ct._id || ct.id}
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setInviteRHFormData({ ...inviteRHFormData, typeId: ct._id || ct.id });
-                                setIsCompanyTypeDropdownOpen(false);
-                              }}
-                              className="w-full px-[26px] py-2.5 text-left font-instrument text-base text-[#002222] hover:bg-[#ECEFEF] transition-colors"
-                            >
-                              {ct.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <select
+                    value={inviteRHFormData.typeId || ''}
+                    onChange={(e) => setInviteRHFormData({ ...inviteRHFormData, typeId: e.target.value })}
+                    className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] focus:outline-none focus:ring-2 focus:ring-[#0389A6] focus:border-transparent appearance-none cursor-pointer"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 6L8 10L12 6' stroke='%235A6565' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center', paddingRight: '44px' }}
+                  >
+                    <option value="">Sélectionnez un secteur</option>
+                    {companyTypes.map((ct) => (
+                      <option key={ct._id || ct.id} value={ct._id || ct.id}>
+                        {ct.name}
+                      </option>
+                    ))}
+                  </select>
+                  {companyTypes.length === 0 && (
+                    <p className="px-2.5 mt-1 font-instrument text-sm text-[#5A6565]">
+                      Aucun secteur disponible. Exécutez le seed des types d&apos;entreprise en production.
+                    </p>
+                  )}
                 </div>
 
                 {createdInvitationLink && (

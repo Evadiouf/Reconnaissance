@@ -68,7 +68,7 @@ export class CompaniesController {
   @Get('all-with-employees')
   @Version('1')
   @UseGuards(RolesGuard)
-  @Roles('superadmin')
+  @Roles('admin', 'superadmin')
   async getAllCompaniesWithEmployees() {
     return this.companiesService.getAllCompaniesWithEmployees();
   }

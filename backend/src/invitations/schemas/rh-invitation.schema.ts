@@ -45,8 +45,7 @@ export const RHInvitationSchema = SchemaFactory.createForClass(RHInvitation);
 
 // Index pour la recherche par email et statut
 RHInvitationSchema.index({ email: 1, status: 1 });
-// Index pour la recherche par token
-RHInvitationSchema.index({ token: 1 });
+// token a déjà index: true dans @Prop
 
 
 
