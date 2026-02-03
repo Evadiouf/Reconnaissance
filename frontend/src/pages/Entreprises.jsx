@@ -2077,10 +2077,14 @@ function Entreprises() {
                   
                     // Afficher un message clair selon l'envoi d'email
                     if (res?.emailSent) {
-                      setToast({ show: true, message: `Invitation envoyée par email à ${inviteRHFormData.email} !`, type: 'success' });
+                      setToast({ show: true, message: `Invitation envoyée par email à ${inviteRHFormData.email} ! (Vérifiez les spams si vous ne le voyez pas.)`, type: 'success' });
                     } else {
                       const reason = res?.emailError ? ` (${res.emailError})` : '';
-                      setToast({ show: true, message: `Invitation créée, mais l'email n'a pas été envoyé${reason}. Copiez le lien et envoyez-le manuellement.`, type: 'error' });
+                      setToast({
+                        show: true,
+                        message: `Invitation enregistrée, mais l'email n'a pas été envoyé${reason}. Copiez le lien ci-dessous. Pour activer les emails : configurez Mailjet sur Render (MAILJET_* + adresse d'envoi vérifiée).`,
+                        type: 'error'
+                      });
                     }
                   } catch (error) {
                     console.error('Erreur lors de l\'envoi de l\'invitation:', error);
