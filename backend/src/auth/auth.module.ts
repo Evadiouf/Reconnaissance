@@ -81,6 +81,7 @@ export class AuthModule {
               inject: [ConfigService],
             },
           ],
+          exports: [getRedisConnectionToken()],
         },
         JwtModule.registerAsync({
           inject: [ConfigService],
