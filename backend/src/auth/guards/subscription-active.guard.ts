@@ -7,6 +7,8 @@ export class SubscriptionActiveGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
+    const user = req?.user as { roles?: string[] } | undefined;
+    const roles = user?.roles || [];
 
     const companyId =
       req?.body?.companyId ||
@@ -16,6 +18,11 @@ export class SubscriptionActiveGuard implements CanActivate {
 
     if (!companyId) {
       throw new BadRequestException('companyId requis');
+    }
+
+    // Super admin : pas de vérification d'abonnement (évite 403 sur dashboard / invitation)
+    if (roles.includes('superadmin')) {
+      return true;
     }
 
     const active = await this.companySubscriptionsService.findActiveSubscriptionByCompanyId(companyId);

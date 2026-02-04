@@ -281,6 +281,7 @@ function Entreprises() {
           ? await companiesService.getAllCompanies()
           : await companiesService.getMyCompanies();
         const formattedCompanies = formatCompaniesData(companiesData);
+        setApiLoadError(null);
 
         // IMPORTANT:
         // - Pour admin: ne pas fusionner avec localStorage (sinon les anciennes entreprises supprimées réapparaissent)
@@ -326,8 +327,15 @@ function Entreprises() {
         });
         
         setCompanies(allCompanies);
+        setApiLoadError(null);
       } catch (error) {
         console.error('Erreur lors du chargement des entreprises depuis l\'API:', error);
+        if (error.response?.status === 403) {
+          setCompanies([]);
+          setApiLoadError('Accès refusé (403). Connectez-vous avec un compte administrateur ou superadmin pour gérer les entreprises et envoyer des invitations.');
+          return;
+        }
+        setApiLoadError(null);
         // En cas d'erreur API, charger depuis localStorage uniquement
         try {
           const localCompanies = JSON.parse(localStorage.getItem('companies') || '[]');
@@ -395,6 +403,7 @@ function Entreprises() {
   // Plus besoin de données mockées - initialisation à zéro
 
   const [companies, setCompanies] = useState([]);
+  const [apiLoadError, setApiLoadError] = useState(null);
 
   // Calcul des statistiques
   const stats = {
@@ -602,6 +611,12 @@ function Entreprises() {
               </button>
             </div>
           </div>
+
+          {apiLoadError && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 font-instrument text-sm">
+              {apiLoadError}
+            </div>
+          )}
 
           {/* Cartes statistiques */}
           <div className="flex gap-4 mb-5">

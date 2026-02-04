@@ -48,7 +48,10 @@ import { BootstrapService } from './bootstrap.service';
     }),
     EmailModule,
     UsersModule,
-    AuthModule,
+    AuthModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: () => ({}),
+    }),
     RolesModule,
     CaslModule,
     CompaniesModule,

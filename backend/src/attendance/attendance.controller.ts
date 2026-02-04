@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post, Query, Request, UseGuards, Version, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post, Query, Request, UseGuards, Version, BadRequestException, Logger } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -13,6 +13,8 @@ import { QueryDashboardDto } from './dto/query-dashboard.dto';
 
 @Controller('attendance')
 export class AttendanceController {
+  private readonly logger = new Logger(AttendanceController.name);
+
   constructor(private readonly attendance: AttendanceService) {}
 
   @UseGuards(JwtAuthGuard, PermissionsGuard, SubscriptionActiveGuard)
@@ -34,17 +36,12 @@ export class AttendanceController {
       // Vérifier si c'est un ObjectId MongoDB valide
       const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(dto.employeeId);
       if (!isValidObjectId) {
-        console.error('❌ employeeId invalide:', dto.employeeId);
+        this.logger.error(`Invalid employeeId: ${dto.employeeId}`);
         throw new BadRequestException('employeeId must be a valid MongoDB ObjectId');
       }
     }
     
-    console.log('🔍 Pointage - Utilisateur connecté:', {
-      userId: loggedInUserId,
-      email: loggedInUserEmail,
-      employeeId: dto.employeeId,
-      targetUserId: targetUserId
-    });
+    this.logger.log(`Clock-in attempt - User: ${loggedInUserEmail}, EmployeeId: ${dto.employeeId || 'self'}, Target: ${targetUserId}`);
     
     // Si on pointe pour quelqu'un d'autre, exiger un rôle RH/admin
     if (dto.employeeId && dto.employeeId !== loggedInUserId) {

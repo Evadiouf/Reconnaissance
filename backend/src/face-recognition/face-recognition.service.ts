@@ -10,13 +10,11 @@ export class FaceRecognitionService {
   private readonly axiosInstance: AxiosInstance;
 
   constructor(private configService: ConfigService) {
-    this.apiUrl = this.configService.get<string>(
+    this.apiUrl = this.configService.getOrThrow<string>(
       'FACE_RECOGNITION_API_URL',
-      'http://153.92.223.185:5001',
     );
-    this.apiKey = this.configService.get<string>(
+    this.apiKey = this.configService.getOrThrow<string>(
       'FACE_RECOGNITION_API_KEY',
-      'sk-naratech-key-2024',
     );
 
     this.axiosInstance = axios.create({

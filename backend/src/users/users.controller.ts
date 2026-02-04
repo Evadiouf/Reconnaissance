@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, HttpCode, HttpStatus, Param, Patch, Post, Request, UseGuards, Version } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, HttpCode, HttpStatus, Param, Patch, Post, Request, UseGuards, Version, Logger } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +7,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('users')
 export class UsersController {
+  private readonly logger = new Logger(UsersController.name);
+
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
@@ -16,14 +18,8 @@ export class UsersController {
     if (!dto?.invitationToken) {
       throw new ForbiddenException('Invitation requise');
     }
-    console.log(' [UsersController.create] Requête reçue pour créer un utilisateur');
-    console.log(' Données reçues dans le contrôleur:', {
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      companyId: dto.companyId,
-      hasPassword: !!dto.password
-    });
+    this.logger.log(`User creation request received for: ${dto.email}`);
+    this.logger.debug(`User data: firstName=${dto.firstName}, lastName=${dto.lastName}, companyId=${dto.companyId}`);
     return this.usersService.create(dto);
   }
 

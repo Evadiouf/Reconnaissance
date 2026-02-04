@@ -399,10 +399,12 @@ function Tarifs() {
     : selectedPlan;
   useEffect(() => {
     if (!invitationToken) return;
-    if (planFromUrl && ['starter', 'business', 'enterprise'].includes(planFromUrl)) {
-      navigate(`/tarifs/${planFromUrl}?token=${invitationToken}`);
+    // Ne rediriger que si on est sur /tarifs avec un paramètre plan explicite
+    // Ne pas rediriger si on arrive directement sur /tarifs?token=...
+    if (planFromUrl && ['starter', 'business', 'enterprise'].includes(planFromUrl) && location.pathname === '/tarifs') {
+      navigate(`/tarifs/${planFromUrl}?token=${invitationToken}`, { replace: true });
     }
-  }, [planFromUrl, invitationToken, navigate]);
+  }, [planFromUrl, invitationToken, navigate, location.pathname]);
 
   useEffect(() => {
     window.scrollTo(0, 0);

@@ -1,35 +1,49 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { LanguageProvider } from './contexts/LanguageContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
+import './App.css';
+
+// Pages publiques - chargées immédiatement
 import Home from './pages/Home';
 import Inscription from './pages/Inscription';
 import Connexion from './pages/Connexion';
-import MotDePasseOublie from './pages/MotDePasseOublie';
-import ReinitialiserMotDePasse from './pages/ReinitialiserMotDePasse';
-import Dashboard from './pages/Dashboard';
-import Employes from './pages/Employes';
-import Horaires from './pages/Horaires';
-import Pointage from './pages/Pointage';
-import Rapports from './pages/Rapports';
-import RapportQuotidienPresence from './pages/RapportQuotidienPresence';
-import Cameras from './pages/Cameras';
-import Parametres from './pages/Parametres';
-import Entreprises from './pages/Entreprises';
-import Notifications from './pages/Notifications';
-import AjouterEmploye from './pages/AjouterEmploye';
-import MonProfil from './pages/MonProfil';
-import Tarifs from './pages/Tarifs';
-import TarifsStarter from './pages/TarifsStarter';
-import TarifsBusiness from './pages/TarifsBusiness';
-import TarifsEnterprise from './pages/TarifsEnterprise';
-import GestionVisages from './pages/GestionVisages';
-import Contact from './pages/Contact';
-import SuiviPresences from './pages/SuiviPresences';
-import MaintenanceVisages from './pages/MaintenanceVisages';
-import './App.css';
+
+// Pages avec lazy loading pour optimiser les performances
+const MotDePasseOublie = lazy(() => import('./pages/MotDePasseOublie'));
+const ReinitialiserMotDePasse = lazy(() => import('./pages/ReinitialiserMotDePasse'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Employes = lazy(() => import('./pages/Employes'));
+const Horaires = lazy(() => import('./pages/Horaires'));
+const Pointage = lazy(() => import('./pages/Pointage'));
+const Rapports = lazy(() => import('./pages/Rapports'));
+const RapportQuotidienPresence = lazy(() => import('./pages/RapportQuotidienPresence'));
+const Cameras = lazy(() => import('./pages/Cameras'));
+const Parametres = lazy(() => import('./pages/Parametres'));
+const Entreprises = lazy(() => import('./pages/Entreprises'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const AjouterEmploye = lazy(() => import('./pages/AjouterEmploye'));
+const MonProfil = lazy(() => import('./pages/MonProfil'));
+const Tarifs = lazy(() => import('./pages/Tarifs'));
+const TarifsStarter = lazy(() => import('./pages/TarifsStarter'));
+const TarifsBusiness = lazy(() => import('./pages/TarifsBusiness'));
+const TarifsEnterprise = lazy(() => import('./pages/TarifsEnterprise'));
+const Contact = lazy(() => import('./pages/Contact'));
+const SuiviPresences = lazy(() => import('./pages/SuiviPresences'));
+const MaintenanceVisages = lazy(() => import('./pages/MaintenanceVisages'));
+
+// Composant de chargement
+const LoadingFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-dark-bg">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+      <p className="text-gray-400">Chargement...</p>
+    </div>
+  </div>
+);
 
 /**
  * Layout avec Navbar et Footer pour les pages publiques
@@ -54,14 +68,15 @@ function App() {
     <ErrorBoundary>
       <LanguageProvider>
         <Router>
-          <Routes>
-        {/* Routes avec Navbar et Footer */}
-        <Route path="/" element={<PublicLayout><Home /></PublicLayout>} />
-        <Route path="/inscription" element={<PublicLayout><Inscription /></PublicLayout>} />
-        <Route path="/connexion" element={<PublicLayout><Connexion /></PublicLayout>} />
-        <Route path="/mot-de-passe-oublie" element={<PublicLayout><MotDePasseOublie /></PublicLayout>} />
-        <Route path="/reinitialiser-mot-de-passe" element={<PublicLayout><ReinitialiserMotDePasse /></PublicLayout>} />
-        <Route path="/contact" element={<Contact />} />
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              {/* Routes avec Navbar et Footer */}
+              <Route path="/" element={<PublicLayout><Home /></PublicLayout>} />
+              <Route path="/inscription" element={<PublicLayout><Inscription /></PublicLayout>} />
+              <Route path="/connexion" element={<PublicLayout><Connexion /></PublicLayout>} />
+              <Route path="/mot-de-passe-oublie" element={<PublicLayout><MotDePasseOublie /></PublicLayout>} />
+              <Route path="/reinitialiser-mot-de-passe" element={<PublicLayout><ReinitialiserMotDePasse /></PublicLayout>} />
+              <Route path="/contact" element={<Contact />} />
         
         {/* Routes Tarifs - sans Navbar et Footer pour un design personnalisé */}
         <Route path="/tarifs" element={<Tarifs />} />
@@ -99,7 +114,8 @@ function App() {
             </ProtectedRoute>
           } 
         />
-          </Routes>
+            </Routes>
+          </Suspense>
         </Router>
       </LanguageProvider>
     </ErrorBoundary>
