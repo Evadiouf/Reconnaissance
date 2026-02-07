@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SubscriptionPlan } from './schemas/subscription-plan.schema';
@@ -6,11 +6,21 @@ import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { SiteConfigService } from '../site-config/site-config.service';
 
 @Injectable()
-export class SubscriptionsService {
+export class SubscriptionsService implements OnModuleInit {
+  private readonly logger = new Logger(SubscriptionsService.name);
+
   constructor(
     @InjectModel(SubscriptionPlan.name) private readonly planModel: Model<SubscriptionPlan>,
     private readonly siteConfigService: SiteConfigService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.ensureDefaultPlansSeeded();
+    } catch (e: any) {
+      this.logger.error('Failed to seed default subscription plans on startup', e?.stack || e);
+    }
+  }
 
   private async ensureDefaultPlansSeeded(): Promise<void> {
     const existing = await this.planModel.exists({});
