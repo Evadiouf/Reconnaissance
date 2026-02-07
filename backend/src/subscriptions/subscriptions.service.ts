@@ -12,6 +12,12 @@ export class SubscriptionsService {
     private readonly siteConfigService: SiteConfigService,
   ) {}
 
+  private async ensureDefaultPlansSeeded(): Promise<void> {
+    const existing = await this.planModel.exists({});
+    if (existing) return;
+    await this.seedDefaultPlans();
+  }
+
   async create(dto: CreateSubscriptionPlanDto): Promise<SubscriptionPlan> {
     let currency = dto.currency;
     if (!currency) {
@@ -31,6 +37,10 @@ export class SubscriptionsService {
   }
 
   async listVisible(): Promise<SubscriptionPlan[]> {
+    const plans = await this.planModel.find({ visible: true, isActive: true }).sort({ amount: 1 }).exec();
+    if (plans.length > 0) return plans;
+
+    await this.ensureDefaultPlansSeeded();
     return this.planModel.find({ visible: true, isActive: true }).sort({ amount: 1 }).exec();
   }
 
