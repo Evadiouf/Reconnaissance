@@ -645,7 +645,11 @@ function Employes() {
             lastName: formData.nomComplet.split(' ').slice(1).join(' ') || '',
             email: formData.email.trim(),
             password: 'TempPassword123!',
-            companyId: companyId.toString()
+            companyId: companyId.toString(),
+            phone: formData.telephone?.trim() || undefined,
+            department: formData.departement || undefined,
+            position: formData.poste || undefined,
+            location: formData.lieuDeTravail || undefined,
           };
 
           if (formData.workingScheduleId) {

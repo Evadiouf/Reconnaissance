@@ -212,7 +212,11 @@ function AjouterEmploye() {
         firstName,
         lastName,
         email: formData.email,
-        password: tempPassword
+        password: tempPassword,
+        phone: formData.telephone?.trim() || undefined,
+        department: formData.departement || undefined,
+        position: formData.poste || undefined,
+        location: formData.lieuDeTravail || undefined,
       };
 
       // Ajouter le companyId si disponible pour rattacher l'employé à l'entreprise

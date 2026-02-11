@@ -928,15 +928,13 @@ function Pointage() {
         return;
       }
 
-      setClockMessage({
-        type: 'error',
-        text:
-          "Erreur: le visage est associé à un identifiant inconnu (" +
-          recognizedNameFormatted +
-          "). Veuillez ré-enregistrer le visage de l'employé depuis la page Employés (photo) afin que l'employee_id corresponde à son ID MongoDB.",
-      });
-      playSound('failure');
-      return;
+      // Ne pas bloquer côté front: si l'API de reconnaissance renvoie déjà un ObjectId,
+      // on tente le pointage et on laisse le backend appliquer les règles (employé dans l'entreprise).
+      console.warn(
+        '⚠️ Reconnaissance a renvoyé un ObjectId mais employé non trouvé côté front. ' +
+          'On tente quand même le pointage et on laisse le backend valider. employeeId=',
+        recognizedNameFormatted,
+      );
     }
 
     // Si la reconnaissance renvoie déjà un ObjectId Mongo valide, on laisse le backend
