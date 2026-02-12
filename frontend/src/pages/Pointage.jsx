@@ -913,9 +913,11 @@ function Pointage() {
 
     if (recognizedIsMongoId && !matchedEmployee) {
       const similarity = typeof recognitionData?.similarity === 'number' ? recognitionData.similarity : null;
-      const isHighConfidence = similarity !== null ? similarity >= 0.65 : false;
+      // Accepter les reconnaissances "MOYENNE" (souvent ~0.45-0.65). On ne bloque que si la
+      // similarité est vraiment faible. Le backend reste l'arbitre final (multi-tenant).
+      const isAcceptableConfidence = similarity !== null ? similarity >= 0.45 : true;
 
-      if (!isHighConfidence) {
+      if (!isAcceptableConfidence) {
         setClockMessage({
           type: 'error',
           text:
