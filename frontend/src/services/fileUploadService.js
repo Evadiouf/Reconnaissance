@@ -1,25 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:3000/api/v1';
-
-// Créer une instance axios avec les headers par défaut
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-});
-
-// Intercepteur pour ajouter le token d'authentification
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+import apiClient from './apiClient';
 
 const fileUploadService = {
   /**
@@ -28,7 +7,7 @@ const fileUploadService = {
   async uploadEmployeePhoto(file) {
     try {
       // Vérifier si l'utilisateur est connecté
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken');
       if (!token) {
         console.warn('Aucun token d\'authentification trouvé, utilisation du stockage local');
         return this.uploadPhotoLocally(file);
@@ -37,7 +16,7 @@ const fileUploadService = {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await apiClient.post('/files/simple-upload', formData, {
+      const response = await apiClient.post('/api/v1/files/simple-upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
