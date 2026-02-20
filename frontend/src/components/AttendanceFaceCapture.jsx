@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import faceRecognitionService from '../services/faceRecognitionService';
+import companiesService from '../services/companiesService';
 
 /**
  * Composant de capture faciale pour le pointage
@@ -22,6 +23,8 @@ const AttendanceFaceCapture = ({
   const [capturedImage, setCapturedImage] = useState(null);
   const [recognitionResult, setRecognitionResult] = useState(null);
   const [apiStatus, setApiStatus] = useState(null);
+  const [employeeNameById, setEmployeeNameById] = useState(() => new Map());
+  const [resolvedRecognizedName, setResolvedRecognizedName] = useState(null);
 
   // Vérifier l'état de l'API au montage
   useEffect(() => {
@@ -54,6 +57,44 @@ const AttendanceFaceCapture = ({
     };
     
     checkApiHealth();
+  }, []);
+
+  // Charger les employés de l'entreprise pour résoudre les ObjectId en noms lisibles
+  useEffect(() => {
+    const loadEmployees = async () => {
+      try {
+        const employees = await companiesService.getCompanyEmployees();
+        const next = new Map();
+
+        const toDisplayName = (emp) => {
+          const directName = String(emp?.name || emp?.nomComplet || '').trim();
+          if (directName) return directName;
+          const firstName = String(emp?.firstName || '').trim();
+          const lastName = String(emp?.lastName || '').trim();
+          const combined = `${firstName} ${lastName}`.trim();
+          return combined || '';
+        };
+
+        for (const emp of Array.isArray(employees) ? employees : []) {
+          const idCandidates = [emp?._id, emp?.id, emp?.userId, emp?.employeeId, emp?.employee_id];
+          const displayName = toDisplayName(emp);
+          if (!displayName) continue;
+          for (const candidate of idCandidates) {
+            if (!candidate) continue;
+            const asString = String(candidate).trim();
+            if (/^[0-9a-fA-F]{24}$/.test(asString)) {
+              next.set(asString.toLowerCase(), displayName);
+            }
+          }
+        }
+
+        setEmployeeNameById(next);
+      } catch (err) {
+        console.warn('⚠️ Impossible de charger la liste des employés pour résoudre les noms:', err);
+      }
+    };
+
+    loadEmployees();
   }, []);
 
   // Démarrer la webcam
@@ -189,6 +230,20 @@ const AttendanceFaceCapture = ({
       console.log('📊 Résultat de la reconnaissance:', result);
       setRecognitionResult(result);
 
+      try {
+        const rawName = result?.recognizedPerson?.name;
+        const isMongoId = typeof rawName === 'string' && /^[0-9a-fA-F]{24}$/.test(rawName.trim());
+        if (isMongoId) {
+          const key = rawName.trim().toLowerCase();
+          const resolved = employeeNameById.get(key) || null;
+          setResolvedRecognizedName(resolved);
+        } else {
+          setResolvedRecognizedName(null);
+        }
+      } catch {
+        setResolvedRecognizedName(null);
+      }
+
       // Vérifier si une personne a été reconnue
       if (result.recognizedPerson) {
         const detection = result.recognizedPerson;
@@ -201,6 +256,7 @@ const AttendanceFaceCapture = ({
           if (onRecognitionSuccess) {
             onRecognitionSuccess({
               personName: detection.name,
+              personDisplayName: resolvedRecognizedName || null,
               confidence: detection.confidence_level,
               similarity: detection.similarity,
               qualityScore: detection.quality_score,
@@ -365,7 +421,7 @@ const AttendanceFaceCapture = ({
             <span className="font-semibold">Personne reconnue !</span>
           </div>
           <div className="text-xs space-y-1">
-            <p><strong>Nom:</strong> {recognitionResult.recognizedPerson.name}</p>
+            <p><strong>Nom:</strong> {resolvedRecognizedName || recognitionResult.recognizedPerson.name}</p>
             <p><strong>Confiance:</strong> {recognitionResult.recognizedPerson.confidence_level}</p>
             <p><strong>Similarité:</strong> {(recognitionResult.recognizedPerson.similarity * 100).toFixed(1)}%</p>
             <p><strong>Temps de traitement:</strong> {recognitionResult.processingTime.toFixed(0)}ms</p>
