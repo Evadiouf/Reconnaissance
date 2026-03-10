@@ -23,6 +23,7 @@ import { FaceRecognitionModule } from './face-recognition/face-recognition.modul
 import { EnterpriseRequestsModule } from './enterprise-requests/enterprise-requests.module';
 import { SupportRequestsModule } from './support-requests/support-requests.module';
 import { SchedulesModule } from './schedules/schedules.module';
+import { CamerasStreamingModule } from './cameras-streaming/cameras-streaming.module';
 import { BootstrapService } from './bootstrap.service';
 
 @Module({
@@ -67,6 +68,7 @@ import { BootstrapService } from './bootstrap.service';
     EnterpriseRequestsModule,
     SupportRequestsModule,
     SchedulesModule,
+    CamerasStreamingModule,
   ],
   controllers: [AppController],
   providers: [

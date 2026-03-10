@@ -49,7 +49,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly usersService: UsersService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Accepter le token depuis le header Authorization Bearer
+      // OU depuis le paramètre ?token= dans l'URL (nécessaire pour les balises <video> qui ne peuvent pas envoyer de headers)
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        (req) => req?.query?.token as string || null,
+      ]),
       ignoreExpiration: false,
       secretOrKey: config.get<string>('JWT_SECRET'),
     });

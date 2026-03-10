@@ -1,10 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import faceRecognitionService from '../services/faceRecognitionService';
 import companiesService from '../services/companiesService';
+import cameraSyncService from '../services/cameraSyncService';
+import cameraStreamService from '../services/cameraStreamService';
 
 /**
  * Composant de capture faciale pour le pointage
  * Utilise l'API Naratech pour la reconnaissance faciale
+ * Supporte les webcams et les caméras IP
  */
 const AttendanceFaceCapture = ({ 
   mode = 'clockin', // 'clockin' ou 'clockout'
@@ -15,8 +18,10 @@ const AttendanceFaceCapture = ({
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  const streamingStartedRef = useRef(false); // Ref pour éviter le closure bug dans les setTimeout
   
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false); // En cours de connexion caméra IP
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [error, setError] = useState(null);
@@ -25,6 +30,67 @@ const AttendanceFaceCapture = ({
   const [apiStatus, setApiStatus] = useState(null);
   const [employeeNameById, setEmployeeNameById] = useState(() => new Map());
   const [resolvedRecognizedName, setResolvedRecognizedName] = useState(null);
+  const [selectedCamera, setSelectedCamera] = useState(null);
+  const [cameraType, setCameraType] = useState('webcam'); // 'webcam' ou 'ip'
+
+  // Charger la caméra active au montage
+  // Détermine le mode de connexion d'une caméra (ip ou webcam) en se basant sur ses données
+  const detectCameraMode = (camera) => {
+    if (!camera) return 'webcam';
+    // Types réseau explicites
+    if (camera.type === 'IP' || camera.type === 'RTSP') return 'ip';
+    // Types personnalisés : détecter selon les données sauvegardées
+    if (camera.ip || camera.rtspUrl) return 'ip';
+    // Webcam (type standard ou "Autre" avec webcamDeviceId ou sans aucune info réseau)
+    return 'webcam';
+  };
+
+  useEffect(() => {
+    const loadActiveCamera = () => {
+      try {
+        // Récupérer la caméra active depuis localStorage
+        const activeCamera = cameraSyncService.getActiveCamera();
+        
+        // Récupérer toutes les caméras pour trouver la caméra active
+        const savedCameras = localStorage.getItem('cameras');
+        if (savedCameras && activeCamera) {
+          const parsedCameras = JSON.parse(savedCameras);
+          const foundCamera = parsedCameras.find(cam => cam.id === activeCamera.id);
+          
+          if (foundCamera) {
+            setSelectedCamera(foundCamera);
+            const mode = detectCameraMode(foundCamera);
+            setCameraType(mode);
+            console.log(`📹 Caméra "${foundCamera.name}" détectée en mode ${mode} (type: ${foundCamera.type})`);
+          }
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement de la caméra active:', error);
+      }
+    };
+
+    loadActiveCamera();
+
+    // Écouter les changements de caméra active
+    const handleActiveCameraChange = (e) => {
+      const activeCamera = e.detail;
+      if (activeCamera) {
+        setSelectedCamera(activeCamera);
+        const mode = detectCameraMode(activeCamera);
+        setCameraType(mode);
+        // Si le stream est actif, le redémarrer avec la nouvelle caméra
+        if (isStreaming) {
+          stopCamera();
+          setTimeout(() => startCamera(), 500);
+        }
+      }
+    };
+
+    window.addEventListener('activeCameraChanged', handleActiveCameraChange);
+    return () => {
+      window.removeEventListener('activeCameraChanged', handleActiveCameraChange);
+    };
+  }, []);
 
   // Vérifier l'état de l'API au montage
   useEffect(() => {
@@ -97,27 +163,11 @@ const AttendanceFaceCapture = ({
     loadEmployees();
   }, []);
 
-  // Démarrer la webcam
+  // Démarrer la caméra (webcam ou IP)
   const startCamera = async () => {
-    console.log('🎥 Démarrage de la caméra...');
+    console.log('🎥 Démarrage de la caméra...', { cameraType, selectedCamera });
     try {
       setError(null);
-      
-      // Vérifier si l'API est disponible
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('L\'accès à la caméra n\'est pas supporté par ce navigateur.');
-      }
-      
-      console.log('🎥 Demande d\'accès à la caméra...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        }
-      });
-      
-      console.log('✅ Stream obtenu:', stream);
       
       // Attendre que l'élément vidéo soit disponible dans le DOM
       let retries = 0;
@@ -128,24 +178,143 @@ const AttendanceFaceCapture = ({
         await new Promise(resolve => setTimeout(resolve, 100));
         retries++;
       }
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        setIsStreaming(true);
-        setError(null); // Effacer toute erreur précédente
-        console.log('✅ Caméra démarrée avec succès, isStreaming:', true);
-        
-        // Forcer la lecture de la vidéo
+
+      if (!videoRef.current) {
+        throw new Error('L\'élément vidéo n\'est pas disponible dans le DOM. Veuillez réessayer.');
+      }
+
+      // Si c'est une caméra IP, utiliser le flux backend
+      if (cameraType === 'ip' && selectedCamera) {
+        console.log('📹 Démarrage de la caméra IP:', selectedCamera.name);
+        setIsConnecting(true);
+        streamingStartedRef.current = false;
+
         try {
-          await videoRef.current.play();
-          console.log('▶️ Vidéo en lecture');
-        } catch (playError) {
-          console.warn('⚠️ Erreur lors de la lecture automatique:', playError);
+          // Construire l'URL de streaming complète (inclut déjà le domaine + token)
+          const streamUrl = cameraStreamService.getStreamUrl(selectedCamera.id, {
+            ip: selectedCamera.ip,
+            port: selectedCamera.port || 554,
+            username: selectedCamera.username,
+            password: selectedCamera.password,
+            rtspUrl: selectedCamera.rtspUrl,
+          });
+
+          console.log('🔗 URL de streaming:', streamUrl.replace(/password=[^&]+/, 'password=****'));
+
+          videoRef.current.src = streamUrl;
+          videoRef.current.crossOrigin = 'anonymous';
+
+          // Gérer les événements vidéo
+          const handleCanPlay = () => {
+            console.log('▶️ Flux IP prêt à être lu');
+            streamingStartedRef.current = true;
+            setIsConnecting(false);
+            setIsStreaming(true);
+            setError(null);
+          };
+
+          const handleError = () => {
+            console.error('❌ Erreur vidéo lors du chargement du flux IP');
+            streamingStartedRef.current = false;
+            setIsConnecting(false);
+            setIsStreaming(false);
+            setError(
+              `Caméra "${selectedCamera.name}" injoignable. ` +
+              'Vérifiez que la caméra est allumée, connectée au réseau, ' +
+              'et que les identifiants (IP, port, utilisateur, mot de passe) sont corrects.'
+            );
+          };
+
+          videoRef.current.addEventListener('canplay', handleCanPlay);
+          videoRef.current.addEventListener('error', handleError);
+
+          // Forcer la lecture
+          try {
+            await videoRef.current.play();
+            console.log('▶️ Flux IP en lecture');
+          } catch (playError) {
+            console.warn('⚠️ Autoplay en attente du flux:', playError);
+          }
+
+          // Timeout de sécurité : 5s = 3s (timeout FFmpeg) + 2s (marge réseau)
+          // Utilise streamingStartedRef pour éviter le closure bug sur isStreaming
+          setTimeout(() => {
+            if (!streamingStartedRef.current) {
+              setIsConnecting(false);
+              setIsStreaming(false);
+              setError(
+                `Délai de connexion dépassé pour "${selectedCamera.name}". ` +
+                'La caméra ne répond pas. Vérifiez qu\'elle est allumée et accessible sur le réseau.'
+              );
+              if (videoRef.current) videoRef.current.src = '';
+            }
+          }, 5000);
+
+          // Nettoyer les event listeners au démontage
+          return () => {
+            if (videoRef.current) {
+              videoRef.current.removeEventListener('canplay', handleCanPlay);
+              videoRef.current.removeEventListener('error', handleError);
+            }
+          };
+        } catch (err) {
+          console.error('❌ Erreur lors du démarrage de la caméra IP:', err);
+          setIsConnecting(false);
+          setError(`Erreur de connexion à la caméra IP: ${err.message || 'Vérifiez les paramètres de la caméra'}`);
         }
       } else {
-        console.error('❌ videoRef.current est toujours null après', maxRetries, 'tentatives');
-        throw new Error('L\'élément vidéo n\'est pas disponible dans le DOM. Veuillez réessayer.');
+        // Utiliser getUserMedia pour la webcam
+        const webcamName = selectedCamera?.webcamLabel || selectedCamera?.name || 'Webcam par défaut';
+        console.log('📹 Démarrage de la webcam:', webcamName);
+        
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('L\'accès à la caméra n\'est pas supporté par ce navigateur.');
+        }
+        
+        console.log('🎥 Demande d\'accès à la caméra:', webcamName);
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: 'user',
+              deviceId: selectedCamera?.webcamDeviceId ? { exact: selectedCamera.webcamDeviceId } : undefined
+            }
+          });
+        } catch (deviceErr) {
+          // Si le périphérique exact n'est pas trouvé, essayer sans contrainte de deviceId
+          if (
+            selectedCamera?.webcamDeviceId &&
+            (deviceErr.name === 'OverconstrainedError' || deviceErr.name === 'ConstraintNotSatisfiedError' || deviceErr.name === 'NotFoundError')
+          ) {
+            console.warn(`⚠️ Webcam "${webcamName}" introuvable, utilisation de la caméra par défaut`);
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: 640 }, height: { ideal: 480 } }
+            });
+          } else {
+            throw deviceErr;
+          }
+        }
+        
+        console.log('✅ Stream obtenu:', stream);
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          streamRef.current = stream;
+          streamingStartedRef.current = true;
+          setIsStreaming(true);
+          setError(null);
+          console.log('✅ Webcam démarrée avec succès');
+          
+          // Forcer la lecture de la vidéo
+          try {
+            await videoRef.current.play();
+            console.log('▶️ Vidéo en lecture');
+          } catch (playError) {
+            console.warn('⚠️ Erreur lors de la lecture automatique:', playError);
+          }
+        }
       }
     } catch (err) {
       console.error('❌ Erreur lors du démarrage de la caméra:', err);
@@ -167,14 +336,30 @@ const AttendanceFaceCapture = ({
     }
   };
 
-  // Arrêter la webcam
+  // Arrêter la caméra (webcam ou IP)
   const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
+    setIsConnecting(false);
+    if (cameraType === 'ip' && selectedCamera) {
+      // Arrêter le flux IP
+      if (videoRef.current) {
+        videoRef.current.src = '';
+        videoRef.current.srcObject = null;
+      }
+      // Optionnel: appeler l'API pour arrêter le stream côté backend
+      if (selectedCamera.id) {
+        cameraStreamService.stopStream(selectedCamera.id).catch(err => {
+          console.warn('Erreur lors de l\'arrêt du stream backend:', err);
+        });
+      }
+    } else {
+      // Arrêter la webcam
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
     }
     setIsStreaming(false);
   };
@@ -352,6 +537,34 @@ const AttendanceFaceCapture = ({
         </div>
       )}
 
+      {/* Badge de la caméra active */}
+      {selectedCamera && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+          <svg className="w-3.5 h-3.5 text-[#0389A6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span>
+            <span className="font-semibold text-[#002222]">{selectedCamera.name}</span>
+            {cameraType === 'webcam' && selectedCamera.webcamLabel && (
+              <span className="ml-1 text-gray-500">— {selectedCamera.webcamLabel}</span>
+            )}
+            {cameraType === 'ip' && selectedCamera.ip && (
+              <span className="ml-1 text-gray-500">— {selectedCamera.ip}</span>
+            )}
+            {cameraType === 'ip' && selectedCamera.rtspUrl && !selectedCamera.ip && (
+              <span className="ml-1 text-gray-500">— RTSP</span>
+            )}
+          </span>
+          <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-medium ${
+            cameraType === 'ip'
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-green-100 text-green-700'
+          }`}>
+            {cameraType === 'ip' ? (selectedCamera.type || 'IP') : 'Webcam'}
+          </span>
+        </div>
+      )}
+
       {/* Zone de vidéo */}
       <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '4/3' }}>
         {/* Toujours rendre l'élément vidéo pour qu'il soit disponible dans le DOM */}
@@ -372,8 +585,22 @@ const AttendanceFaceCapture = ({
           }}
         />
         
+        {/* Spinner pendant la connexion à une caméra IP */}
+        {isConnecting && !isStreaming && (
+          <div className="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-70">
+            <div className="text-center">
+              <svg className="animate-spin w-10 h-10 mx-auto mb-3 text-[#0389A6]" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+              </svg>
+              <p className="text-sm font-medium">Connexion à la caméra...</p>
+              <p className="text-xs opacity-60 mt-1">{selectedCamera?.name}</p>
+            </div>
+          </div>
+        )}
+
         {/* Message quand la caméra n'est pas démarrée */}
-        {!isStreaming && (
+        {!isStreaming && !isConnecting && (
           <div className="absolute inset-0 flex items-center justify-center text-white">
             <div className="text-center">
               <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -439,9 +666,20 @@ const AttendanceFaceCapture = ({
               console.log('🔵 Bouton "Démarrer la caméra" cliqué');
               startCamera();
             }}
-            className="flex-1 px-4 py-2.5 bg-[#0389A6] text-white rounded-lg hover:bg-[#027A94] transition-colors font-instrument text-sm"
+            disabled={isConnecting}
+            className="flex-1 px-4 py-2.5 bg-[#0389A6] text-white rounded-lg hover:bg-[#027A94] transition-colors font-instrument text-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Démarrer la caméra
+            {isConnecting ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                </svg>
+                Connexion en cours...
+              </span>
+            ) : (
+              'Démarrer la caméra'
+            )}
           </button>
         ) : (
           <>

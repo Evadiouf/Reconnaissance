@@ -42,6 +42,7 @@ function Cameras() {
     name: '',
     type: 'IP',
     customType: '', // Pour stocker le type personnalisé quand "Autre" est sélectionné
+    autreMode: 'webcam', // Mode de connexion pour "Autre": 'webcam' ou 'ip'
     location: '',
     ip: '',
     port: '',
@@ -56,6 +57,7 @@ function Cameras() {
     name: '',
     type: 'IP',
     customType: '', // Pour stocker le type personnalisé quand "Autre" est sélectionné
+    autreMode: 'webcam', // Mode de connexion pour "Autre": 'webcam' ou 'ip'
     location: '',
     ip: '',
     port: '',
@@ -198,8 +200,26 @@ function Cameras() {
           setWebcamDevices([]);
           return;
         }
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+
+        // Premier passage : énumérer sans permission
+        let devices = await navigator.mediaDevices.enumerateDevices();
+        let videoInputs = devices.filter((d) => d.kind === 'videoinput');
+
+        // Si les labels sont vides, demander la permission pour les obtenir
+        const hasLabels = videoInputs.some((d) => d.label && d.label.trim() !== '');
+        if (videoInputs.length > 0 && !hasLabels) {
+          try {
+            const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // Arrêter immédiatement le flux (on voulait juste la permission)
+            tempStream.getTracks().forEach((track) => track.stop());
+            // Ré-énumérer avec les labels maintenant disponibles
+            devices = await navigator.mediaDevices.enumerateDevices();
+            videoInputs = devices.filter((d) => d.kind === 'videoinput');
+          } catch (permError) {
+            console.warn('Permission caméra refusée, les noms peuvent être indisponibles:', permError);
+          }
+        }
+
         setWebcamDevices(videoInputs);
       } catch (error) {
         console.error('Erreur lors du chargement des webcams:', error);
@@ -509,6 +529,7 @@ function Cameras() {
                     name: '',
                     type: 'IP',
                     customType: '',
+                    autreMode: 'webcam',
                     location: '',
                     ip: '',
                     port: '',
@@ -658,13 +679,16 @@ function Cameras() {
                             name: camera.name,
                             type: isCustomType ? 'Autre' : camera.type,
                             customType: isCustomType ? camera.type : '',
+                            autreMode: isCustomType
+                              ? (camera.ip || camera.rtspUrl ? 'ip' : 'webcam')
+                              : 'webcam',
                             location: camera.location,
                             ip: ipParts.length > 0 ? ipParts[0] : (camera.ip || ''),
                             port: ipParts.length > 1 ? ipParts[1] : '',
                             rtspUrl: camera.rtspUrl || '',
                             webcamDeviceId: camera.webcamDeviceId || '',
-                            username: 'Admin',
-                            password: 'mot de passe',
+                            username: camera.username || '',
+                            password: camera.password || '',
                             active: camera.active,
                             facialRecognition: true
                           });
@@ -1411,20 +1435,117 @@ function Cameras() {
                 )}
                 {/* Champ de saisie pour type personnalisé */}
                 {addFormData.type === 'Autre' && (
-                  <div className="mt-2 flex flex-col gap-0.5">
-                    <label className="px-2.5 font-instrument text-sm font-medium text-[#002222] leading-[26px]">
-                      Spécifier le type de caméra *
-                    </label>
-                    <input
-                      type="text"
-                      value={addFormData.customType}
-                      onChange={(e) => setAddFormData({...addFormData, customType: e.target.value})}
-                      placeholder="Ex: USB, HDMI, Analogique..."
-                      className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
-                    />
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-sm font-medium text-[#002222] leading-[26px]">
+                        Spécifier le type de caméra *
+                      </label>
+                      <input
+                        type="text"
+                        value={addFormData.customType}
+                        onChange={(e) => setAddFormData({...addFormData, customType: e.target.value})}
+                        placeholder="Ex: USB, HDMI, Analogique..."
+                        className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                      />
+                    </div>
+                    {/* Mode de connexion */}
+                    <div className="flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-sm font-medium text-[#002222] leading-[26px]">
+                        Mode de connexion
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setAddFormData({ ...addFormData, autreMode: 'webcam', ip: '', port: '', rtspUrl: '' })}
+                          className={`flex-1 py-2 rounded-2xl font-instrument text-sm border transition-colors ${
+                            addFormData.autreMode === 'webcam'
+                              ? 'bg-[#0389A6] text-white border-[#0389A6]'
+                              : 'bg-[#ECEFEF] text-[#5A6565] border-[#D4DCDC] hover:bg-[#E5E9E9]'
+                          }`}
+                        >
+                          Webcam / USB
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddFormData({ ...addFormData, autreMode: 'ip', webcamDeviceId: '' })}
+                          className={`flex-1 py-2 rounded-2xl font-instrument text-sm border transition-colors ${
+                            addFormData.autreMode === 'ip'
+                              ? 'bg-[#0389A6] text-white border-[#0389A6]'
+                              : 'bg-[#ECEFEF] text-[#5A6565] border-[#D4DCDC] hover:bg-[#E5E9E9]'
+                          }`}
+                        >
+                          IP / Réseau
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Webcam (si type Autre + mode webcam) */}
+              {addFormData.type === 'Autre' && addFormData.autreMode === 'webcam' && (
+                <div className="flex flex-col gap-0.5">
+                  <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                    Webcam (optionnel)
+                  </label>
+                  <select
+                    value={addFormData.webcamDeviceId}
+                    onChange={(e) => setAddFormData({ ...addFormData, webcamDeviceId: e.target.value })}
+                    className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                  >
+                    <option value="">Caméra par défaut</option>
+                    {webcamDevices.map((d, idx) => (
+                      <option key={d.deviceId || idx} value={d.deviceId}>
+                        {d.label || `Webcam ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* IP/RTSP (si type Autre + mode ip) */}
+              {addFormData.type === 'Autre' && addFormData.autreMode === 'ip' && (
+                <>
+                  <div className="flex gap-3">
+                    <div className="flex-1 flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                        Adresse IP
+                      </label>
+                      <input
+                        type="text"
+                        value={addFormData.ip}
+                        onChange={(e) => setAddFormData({ ...addFormData, ip: e.target.value })}
+                        placeholder="192.168.1.10"
+                        className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                      />
+                    </div>
+                    <div className="w-28 flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                        Port
+                      </label>
+                      <input
+                        type="text"
+                        value={addFormData.port}
+                        onChange={(e) => setAddFormData({ ...addFormData, port: e.target.value })}
+                        placeholder="554"
+                        className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                      URL RTSP (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={addFormData.rtspUrl}
+                      onChange={(e) => setAddFormData({ ...addFormData, rtspUrl: e.target.value })}
+                      placeholder="rtsp://user:pass@192.168.1.10:554/stream1"
+                      className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                    />
+                  </div>
+                </>
+              )}
 
               {/* URL RTSP (si type RTSP) */}
               {addFormData.type === 'RTSP' && (
@@ -1646,9 +1767,19 @@ function Cameras() {
                       name: addFormData.name,
                       location: addFormData.location,
                       status: 'offline', // Nouvelle caméra par défaut hors ligne
-                      ip: addFormData.type === 'IP' && addFormData.ip && addFormData.port ? `${addFormData.ip}:${addFormData.port}` : null,
-                      rtspUrl: addFormData.type === 'RTSP' ? (addFormData.rtspUrl?.trim() || null) : null,
-                      webcamDeviceId: addFormData.type === 'WEBCAM' ? addFormData.webcamDeviceId : null,
+                      ip: (addFormData.type === 'IP' || (addFormData.type === 'Autre' && addFormData.autreMode === 'ip')) && addFormData.ip && addFormData.port
+                        ? `${addFormData.ip}:${addFormData.port}` : null,
+                      rtspUrl: (addFormData.type === 'RTSP' || (addFormData.type === 'Autre' && addFormData.autreMode === 'ip'))
+                        ? (addFormData.rtspUrl?.trim() || null) : null,
+                      webcamDeviceId: (addFormData.type === 'WEBCAM' || (addFormData.type === 'Autre' && addFormData.autreMode === 'webcam'))
+                        ? (addFormData.webcamDeviceId || null) : null,
+                      webcamLabel: (addFormData.type === 'WEBCAM' || (addFormData.type === 'Autre' && addFormData.autreMode === 'webcam'))
+                        ? (webcamDevices.find((d) => d.deviceId === addFormData.webcamDeviceId)?.label || null)
+                        : null,
+                      username: (addFormData.type === 'IP' || addFormData.type === 'RTSP' || (addFormData.type === 'Autre' && addFormData.autreMode === 'ip'))
+                        ? (addFormData.username?.trim() || null) : null,
+                      password: (addFormData.type === 'IP' || addFormData.type === 'RTSP' || (addFormData.type === 'Autre' && addFormData.autreMode === 'ip'))
+                        ? (addFormData.password?.trim() || null) : null,
                       resolution: '1920x1080',
                       fps: 30,
                       confidence: null,
@@ -1812,20 +1943,117 @@ function Cameras() {
                 )}
                 {/* Champ de saisie pour type personnalisé */}
                 {editFormData.type === 'Autre' && (
-                  <div className="mt-2 flex flex-col gap-0.5">
-                    <label className="px-2.5 font-instrument text-sm font-medium text-[#002222] leading-[26px]">
-                      Spécifier le type de caméra *
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.customType}
-                      onChange={(e) => setEditFormData({...editFormData, customType: e.target.value})}
-                      placeholder="Ex: USB, HDMI, Analogique..."
-                      className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
-                    />
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-sm font-medium text-[#002222] leading-[26px]">
+                        Spécifier le type de caméra *
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.customType}
+                        onChange={(e) => setEditFormData({...editFormData, customType: e.target.value})}
+                        placeholder="Ex: USB, HDMI, Analogique..."
+                        className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                      />
+                    </div>
+                    {/* Mode de connexion */}
+                    <div className="flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-sm font-medium text-[#002222] leading-[26px]">
+                        Mode de connexion
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setEditFormData({ ...editFormData, autreMode: 'webcam', ip: '', port: '', rtspUrl: '' })}
+                          className={`flex-1 py-2 rounded-2xl font-instrument text-sm border transition-colors ${
+                            editFormData.autreMode === 'webcam'
+                              ? 'bg-[#0389A6] text-white border-[#0389A6]'
+                              : 'bg-[#ECEFEF] text-[#5A6565] border-[#D4DCDC] hover:bg-[#E5E9E9]'
+                          }`}
+                        >
+                          Webcam / USB
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditFormData({ ...editFormData, autreMode: 'ip', webcamDeviceId: '' })}
+                          className={`flex-1 py-2 rounded-2xl font-instrument text-sm border transition-colors ${
+                            editFormData.autreMode === 'ip'
+                              ? 'bg-[#0389A6] text-white border-[#0389A6]'
+                              : 'bg-[#ECEFEF] text-[#5A6565] border-[#D4DCDC] hover:bg-[#E5E9E9]'
+                          }`}
+                        >
+                          IP / Réseau
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Webcam (si type Autre + mode webcam) */}
+              {editFormData.type === 'Autre' && editFormData.autreMode === 'webcam' && (
+                <div className="flex flex-col gap-0.5">
+                  <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                    Webcam (optionnel)
+                  </label>
+                  <select
+                    value={editFormData.webcamDeviceId}
+                    onChange={(e) => setEditFormData({ ...editFormData, webcamDeviceId: e.target.value })}
+                    className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                  >
+                    <option value="">Caméra par défaut</option>
+                    {webcamDevices.map((d, idx) => (
+                      <option key={d.deviceId || idx} value={d.deviceId}>
+                        {d.label || `Webcam ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* IP/RTSP (si type Autre + mode ip) */}
+              {editFormData.type === 'Autre' && editFormData.autreMode === 'ip' && (
+                <>
+                  <div className="flex gap-3">
+                    <div className="flex-1 flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                        Adresse IP
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.ip}
+                        onChange={(e) => setEditFormData({ ...editFormData, ip: e.target.value })}
+                        placeholder="192.168.1.10"
+                        className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                      />
+                    </div>
+                    <div className="w-28 flex flex-col gap-0.5">
+                      <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                        Port
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.port}
+                        onChange={(e) => setEditFormData({ ...editFormData, port: e.target.value })}
+                        placeholder="554"
+                        className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                      URL RTSP (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.rtspUrl}
+                      onChange={(e) => setEditFormData({ ...editFormData, rtspUrl: e.target.value })}
+                      placeholder="rtsp://user:pass@192.168.1.10:554/stream1"
+                      className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                    />
+                  </div>
+                </>
+              )}
 
               {/* URL RTSP (si type RTSP) */}
               {editFormData.type === 'RTSP' && (
@@ -2043,9 +2271,19 @@ function Cameras() {
                           name: editFormData.name,
                           type: finalType,
                           location: editFormData.location,
-                          ip: editFormData.type === 'IP' && editFormData.ip && editFormData.port ? `${editFormData.ip}:${editFormData.port}` : null,
-                          rtspUrl: editFormData.type === 'RTSP' ? (editFormData.rtspUrl?.trim() || null) : null,
-                          webcamDeviceId: editFormData.type === 'WEBCAM' ? editFormData.webcamDeviceId : null,
+                          ip: (editFormData.type === 'IP' || (editFormData.type === 'Autre' && editFormData.autreMode === 'ip')) && editFormData.ip && editFormData.port
+                            ? `${editFormData.ip}:${editFormData.port}` : null,
+                          rtspUrl: (editFormData.type === 'RTSP' || (editFormData.type === 'Autre' && editFormData.autreMode === 'ip'))
+                            ? (editFormData.rtspUrl?.trim() || null) : null,
+                          webcamDeviceId: (editFormData.type === 'WEBCAM' || (editFormData.type === 'Autre' && editFormData.autreMode === 'webcam'))
+                            ? (editFormData.webcamDeviceId || null) : null,
+                          webcamLabel: (editFormData.type === 'WEBCAM' || (editFormData.type === 'Autre' && editFormData.autreMode === 'webcam'))
+                            ? (webcamDevices.find((d) => d.deviceId === editFormData.webcamDeviceId)?.label || null)
+                            : null,
+                          username: (editFormData.type === 'IP' || editFormData.type === 'RTSP' || (editFormData.type === 'Autre' && editFormData.autreMode === 'ip'))
+                            ? (editFormData.username?.trim() || null) : null,
+                          password: (editFormData.type === 'IP' || editFormData.type === 'RTSP' || (editFormData.type === 'Autre' && editFormData.autreMode === 'ip'))
+                            ? (editFormData.password?.trim() || null) : null,
                           active: editFormData.active,
                           userEmail: camera.userEmail // Préserver l'email de l'utilisateur
                         };
