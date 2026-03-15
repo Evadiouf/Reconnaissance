@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { TimeEntry } from './schemas/time-entry.schema';
 import { DailyStats } from './schemas/daily-stats.schema';
 import { Company } from '../companies/schemas/company.schema';
+import { CompaniesService } from '../companies/companies.service';
 
 @Injectable()
 export class AttendanceService {
@@ -11,6 +12,7 @@ export class AttendanceService {
     @InjectModel(TimeEntry.name) private readonly timeEntryModel: Model<TimeEntry>,
     @InjectModel(DailyStats.name) private readonly dailyStatsModel: Model<DailyStats>,
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
+    private readonly companiesService: CompaniesService,
   ) {}
 
   private async ensureUserInCompany(userId: string, companyId: string): Promise<void> {
@@ -55,13 +57,22 @@ export class AttendanceService {
     try {
       await this.ensureUserInCompany(targetUserId, companyId);
     } catch (err: any) {
-      console.error('❌ [Attendance] target not in company', {
-        requesterUserId,
-        targetUserId,
-        companyId,
-        message: err?.message,
-      });
-      throw err;
+      // Réparation: si la personne reconnue (target) n'est pas dans l'entreprise mais que le requester
+      // est autorisé (pointage pour un autre = RH/admin), tenter de la rattacher une fois.
+      try {
+        await this.companiesService.addEmployeeToCompany(companyId, targetUserId);
+        console.log('🔧 [Attendance] Employé rattaché à l\'entreprise (réparation)', { targetUserId, companyId });
+        await this.ensureUserInCompany(targetUserId, companyId);
+      } catch (repairErr: any) {
+        console.error('❌ [Attendance] target not in company (réparation échouée)', {
+          requesterUserId,
+          targetUserId,
+          companyId,
+          message: err?.message,
+          repairMessage: repairErr?.message,
+        });
+        throw err;
+      }
     }
   }
 

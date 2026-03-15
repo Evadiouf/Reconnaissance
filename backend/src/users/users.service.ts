@@ -276,7 +276,7 @@ export class UsersService {
         try {
           await this.companiesService.addEmployeeToCompany(dto.companyId, savedUserId);
           console.log('✅ [UsersService.create] Employé rattaché à l\'entreprise avec succès!');
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ [UsersService.create] Erreur lors du rattachement de l\'employé à l\'entreprise:', error);
           console.error('📋 Détails de l\'erreur:', {
             message: error?.message,
@@ -284,7 +284,8 @@ export class UsersService {
             companyId: dto.companyId,
             userId: savedUserId
           });
-          // Ne pas bloquer la création si le rattachement échoue
+          // Relancer pour éviter un employé créé mais non rattaché (pointage impossible)
+          throw error;
         }
       } else {
         console.log('ℹ️ [UsersService.create] Aucun companyId fourni, pas de rattachement à l\'entreprise');

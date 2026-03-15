@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -110,12 +110,18 @@ export class CompaniesService {
   }
 
   async addEmployeeToCompany(companyId: string, userId: string): Promise<void> {
-    await this.companyModel
+    const result = await this.companyModel
       .updateOne(
         { _id: new Types.ObjectId(companyId) },
         { $addToSet: { employees: new Types.ObjectId(userId) } },
       )
       .exec();
+
+    if (!result.matchedCount) {
+      throw new NotFoundException(
+        `Entreprise introuvable (id: ${companyId}). L'employé n'a pas pu être rattaché.`,
+      );
+    }
   }
 
   async removeEmployeeFromCompany(companyId: string, userId: string): Promise<void> {

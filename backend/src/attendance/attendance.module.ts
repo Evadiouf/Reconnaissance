@@ -6,6 +6,7 @@ import { Company, CompanySchema } from '../companies/schemas/company.schema';
 import { AttendanceService } from './attendance.service';
 import { AttendanceController } from './attendance.controller';
 import { CompanySubscriptionsModule } from '../company-subscriptions/company-subscriptions.module';
+import { CompaniesModule } from '../companies/companies.module';
 import { SubscriptionActiveGuard } from '../auth/guards/subscription-active.guard';
 
 @Module({
@@ -16,6 +17,7 @@ import { SubscriptionActiveGuard } from '../auth/guards/subscription-active.guar
       { name: Company.name, schema: CompanySchema },
     ]),
     CompanySubscriptionsModule,
+    CompaniesModule,
   ],
   controllers: [AttendanceController],
   providers: [AttendanceService, SubscriptionActiveGuard],

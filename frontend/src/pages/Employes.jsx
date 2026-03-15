@@ -624,10 +624,16 @@ function Employes() {
         console.log('🏢 CompanyId depuis user:', companyId);
         
         // Si pas de companyId dans user, essayer de le récupérer via l'API
+        // getMyCompanyId() retourne soit la chaîne companyId soit null
         if (!companyId) {
           try {
             const companyData = await companiesService.getMyCompanyId();
-            companyId = companyData?.companyId || companyData?._id || companyData?.id;
+            companyId =
+              (typeof companyData === 'string' ? companyData : null) ||
+              companyData?.companyId ||
+              companyData?._id ||
+              companyData?.id ||
+              null;
             console.log('🏢 CompanyId depuis API:', companyId);
           } catch (err) {
             console.error('❌ Erreur lors de la récupération du companyId:', err);

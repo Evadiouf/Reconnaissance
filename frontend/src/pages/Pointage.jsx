@@ -1006,7 +1006,7 @@ function Pointage() {
         text:
           'Erreur lors du pointage: ' +
           (isForbidden
-            ? "La personne reconnue n'appartient pas à cette entreprise."
+            ? "La personne reconnue n'appartient pas à cette entreprise. Vérifiez que l'employé a bien été ajouté à l'entreprise (page Employés) avec sa photo. Réessayez le pointage : le système peut rattacher l'employé automatiquement."
             : isNotFound
               ? "Entreprise ou employé introuvable."
               : (apiMessage || error.message || error.toString()))
