@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, HttpCode, HttpStatus, Param, Patch, Post, Request, UseGuards, Version, Logger } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, HttpStatus, Param, Patch, Post, Request, UseGuards, Version, Logger } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -30,6 +30,15 @@ export class UsersController {
   @HttpCode(HttpStatus.CREATED)
   createEmployee(@Request() req: any, @Body() dto: CreateUserDto) {
     return this.usersService.createEmployee(req.user.userId, dto);
+  }
+
+  /** Mettre à jour son propre profil (accessible à tous les utilisateurs connectés) */
+  @Patch('me')
+  @Version('1')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  updateMyProfile(@Request() req: any, @Body() body: any) {
+    return this.usersService.updateMyProfile(req.user.userId, body);
   }
 
   @Patch(':id')

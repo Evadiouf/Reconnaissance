@@ -736,13 +736,30 @@ function Pointage() {
     return /^[0-9a-fA-F]{24}$/.test(id);
   };
 
-  // Récupérer l'ID de l'entreprise avec fallback (uniquement ObjectId MongoDB valide)
+  // Récupérer l'ID de l'entreprise (source de vérité = API, pour être cohérent avec la liste des employés)
   const getCompanyId = async () => {
     const { user } = authService.getStoredAuth();
     const userData = getUserData();
-    
-    // Essayer d'abord depuis les données utilisateur
-    let companyId =
+
+    // Toujours privilégier l'API pour le pointage : même companyId que getCompanyEmployees côté backend
+    try {
+      const apiCompanyId = await companiesService.getMyCompanyId();
+      if (apiCompanyId && isValidMongoId(apiCompanyId)) {
+        const currentUser = userData || user;
+        if (currentUser) {
+          currentUser.companyId = apiCompanyId;
+          try {
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+          } catch (_) {}
+        }
+        return apiCompanyId;
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération du companyId depuis l\'API:', error);
+    }
+
+    // Fallback cache si l'API échoue
+    const companyId =
       user?.companyId ||
       user?.company?._id ||
       user?.company?.id ||
@@ -750,29 +767,9 @@ function Pointage() {
       userData?.company?._id ||
       userData?.company?.id ||
       null;
-    
-    // Vérifier si c'est un ObjectId MongoDB valide
     if (companyId && isValidMongoId(companyId)) {
       return companyId;
     }
-    
-    // Source de vérité: récupérer depuis l'API si pas de companyId valide côté user
-    try {
-      const apiCompanyId = await companiesService.getMyCompanyId();
-      if (apiCompanyId && isValidMongoId(apiCompanyId)) {
-        // Mettre à jour les données utilisateur avec le companyId trouvé
-        const currentUser = userData || user;
-        if (currentUser) {
-          currentUser.companyId = apiCompanyId;
-          localStorage.setItem('currentUser', JSON.stringify(currentUser));
-        }
-        return apiCompanyId;
-      }
-    } catch (error) {
-      console.error('Erreur lors de la récupération du companyId depuis l\'API:', error);
-    }
-    
-    // Si aucun ObjectId valide trouvé, retourner null
     return null;
   };
 
@@ -830,41 +827,24 @@ function Pointage() {
     const recognizedNormalized = recognizedNameFormatted.toLowerCase();
     const recognizedIsMongoId = /^[0-9a-fA-F]{24}$/.test(recognizedNameFormatted);
 
-    const loadEmployeesFromLocalStorage = () => {
-      try {
-        const { user: storedUser } = authService.getStoredAuth();
-        const userEmail = (storedUser?.email || '').toLowerCase();
-        const companyId =
-          storedUser?.companyId ||
-          storedUser?.company?._id ||
-          storedUser?.company?.id ||
-          null;
-        const scopedKey = companyId ? `employees:${companyId}` : (userEmail ? `employees:user:${userEmail}` : null);
-        const raw = (scopedKey ? localStorage.getItem(scopedKey) : null) || '[]';
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    };
-
+    // Source de vérité = serveur (entreprises et employés en base, photos enregistrées sur l'API Naratech).
+    // La reconnaissance ne peut avoir lieu que si les employés et leurs photos sont enregistrés côté serveur.
     let employees = [];
     try {
-      // Source principale: API (renvoie des users Mongo avec _id)
       const apiEmployees = await companiesService.getCompanyEmployees();
       employees = Array.isArray(apiEmployees) ? apiEmployees : [];
-      console.log('👥 Employés chargés depuis l\'API pour le pointage facial:', employees.length);
+      console.log('👥 Employés chargés depuis le serveur pour le pointage facial:', employees.length);
     } catch {
       employees = [];
     }
 
-    // companiesService.getCompanyEmployees() retourne [] en cas d'erreur (catch interne).
-    // Si l'API renvoie 0 employé, on tente quand même le fallback localStorage.
     if (employees.length === 0) {
-      const fallbackEmployees = loadEmployeesFromLocalStorage();
-      if (fallbackEmployees.length > 0) {
-        employees = fallbackEmployees;
-      }
+      setClockMessage({
+        type: 'error',
+        text: 'Aucun employé sur le serveur. Ajoutez des employés avec leur photo depuis la page Employés — les photos sont enregistrées sur le serveur pour la reconnaissance faciale.',
+      });
+      playSound('failure');
+      return;
     }
 
     const extractEmployeeMongoIds = (emp) => {
@@ -1065,13 +1045,44 @@ function Pointage() {
     console.log('👤 employeeId envoyé:', detection.employeeId);
     console.log('📝 Nom reconnu:', detection.name);
 
-    await attendanceService.clockIn({
-      companyId,
-      ...(detection.employeeId && { employeeId: detection.employeeId }), // N'envoyer que si valide
-      source: 'kiosk',
-      location,
-      notes: `Pointage facial - ${detection.name} (${(detection.similarity * 100).toFixed(1)}% de confiance)`,
-    });
+    // Rattacher l'employé reconnu à "mon" entreprise avant le pointage (idempotent : si déjà dedans, rien ne change)
+    if (detection.employeeId && /^[0-9a-fA-F]{24}$/.test(String(detection.employeeId))) {
+      try {
+        await companiesService.attachEmployeeToMyCompany(detection.employeeId);
+        console.log('🔧 Employé rattaché à l\'entreprise (avant pointage)');
+      } catch (attachErr) {
+        console.warn('⚠️ Rattachement préalable (non bloquant):', attachErr?.response?.data?.message || attachErr?.message);
+      }
+    }
+
+    const doClockIn = () =>
+      attendanceService.clockIn({
+        companyId,
+        ...(detection.employeeId && { employeeId: detection.employeeId }),
+        source: 'kiosk',
+        location,
+        notes: `Pointage facial - ${detection.name} (${(detection.similarity * 100).toFixed(1)}% de confiance)`,
+      });
+
+    try {
+      await doClockIn();
+    } catch (firstErr) {
+      if (
+        firstErr?.response?.status === 403 &&
+        detection.employeeId &&
+        /^[0-9a-fA-F]{24}$/.test(String(detection.employeeId))
+      ) {
+        try {
+          await companiesService.attachEmployeeToMyCompany(detection.employeeId);
+          console.log('🔧 Rattachement employé (retry), nouvelle tentative...');
+          await doClockIn();
+        } catch (retryErr) {
+          throw retryErr;
+        }
+      } else {
+        throw firstErr;
+      }
+    }
 
     setClockMessage({ 
       type: 'success', 
@@ -1121,15 +1132,13 @@ function Pointage() {
       // Continuer sans géolocalisation
     }
 
-    // Trouver l'employé correspondant pour obtenir son ID si pas déjà fourni
+    // Trouver l'employé correspondant pour le clock-out (source = serveur uniquement)
     let employeeId = detection.employeeId;
     if (!employeeId) {
       let employees = [];
       try {
-        const scopedKey = companyId ? `employees:${companyId}` : null;
-        const raw = (scopedKey ? localStorage.getItem(scopedKey) : null) || '[]';
-        const parsed = JSON.parse(raw);
-        employees = Array.isArray(parsed) ? parsed : [];
+        const apiEmployees = await companiesService.getCompanyEmployees();
+        employees = Array.isArray(apiEmployees) ? apiEmployees : [];
       } catch {
         employees = [];
       }
@@ -1155,11 +1164,42 @@ function Pointage() {
       }
     }
 
-    await attendanceService.clockOut({
-      companyId,
-      ...(employeeId && { employeeId }), // N'envoyer que si valide
-      notes: `Pointage facial (kiosk) - ${detection.name} (${(detection.similarity * 100).toFixed(1)}% de confiance)`,
-    });
+    // Rattacher l'employé à "mon" entreprise avant le pointage de sortie (idempotent)
+    if (employeeId && /^[0-9a-fA-F]{24}$/.test(String(employeeId))) {
+      try {
+        await companiesService.attachEmployeeToMyCompany(employeeId);
+        console.log('🔧 Employé rattaché à l\'entreprise (avant pointage sortie)');
+      } catch (attachErr) {
+        console.warn('⚠️ Rattachement préalable (non bloquant):', attachErr?.response?.data?.message || attachErr?.message);
+      }
+    }
+
+    const doClockOut = () =>
+      attendanceService.clockOut({
+        companyId,
+        ...(employeeId && { employeeId }),
+        notes: `Pointage facial (kiosk) - ${detection.name} (${(detection.similarity * 100).toFixed(1)}% de confiance)`,
+      });
+
+    try {
+      await doClockOut();
+    } catch (firstErr) {
+      if (
+        firstErr?.response?.status === 403 &&
+        employeeId &&
+        /^[0-9a-fA-F]{24}$/.test(String(employeeId))
+      ) {
+        try {
+          await companiesService.attachEmployeeToMyCompany(employeeId);
+          console.log('🔧 Rattachement employé (sortie, retry), nouvelle tentative...');
+          await doClockOut();
+        } catch (retryErr) {
+          throw retryErr;
+        }
+      } else {
+        throw firstErr;
+      }
+    }
 
     setClockMessage({ 
       type: 'success', 

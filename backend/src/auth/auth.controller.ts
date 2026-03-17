@@ -23,6 +23,9 @@ export class AuthController {
         email: req.user.email,
         firstName: req.user.firstName || req.user.prenom,
         lastName: req.user.lastName || req.user.nom,
+        phone: req.user.phone || '',
+        department: req.user.department || '',
+        position: req.user.position || '',
         roles: req.user.roles || [],
       },
     };

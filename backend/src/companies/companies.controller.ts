@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Request, UseGuards, Version, HttpException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post, Request, UseGuards, Version, HttpException, Param, NotFoundException } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { InviteRHDto } from './dto/invite-rh.dto';
@@ -57,6 +57,27 @@ export class CompaniesController {
         error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  /** Supprimer définitivement une entreprise (company + employés + pointages + photos Naratech) */
+  @Delete(':id')
+  @Version('1')
+  @HttpCode(HttpStatus.OK)
+  async deleteCompany(@Request() req: any, @Param('id') id: string) {
+    return this.companiesService.deleteCompany(id, req.user.userId);
+  }
+
+  /** Rattacher un utilisateur existant à mon entreprise (réparation pointage "n'appartient pas à cette entreprise") */
+  @Post('my/employees/:userId')
+  @Version('1')
+  @HttpCode(HttpStatus.OK)
+  async attachEmployeeToMyCompany(@Request() req: any, @Param('userId') userId: string) {
+    const companyId = await this.companiesService.findCompanyIdByUserId(req.user.userId);
+    if (!companyId) {
+      throw new NotFoundException('Aucune entreprise associée à votre compte');
+    }
+    await this.companiesService.addEmployeeToCompany(companyId, userId);
+    return { message: 'Employé rattaché à l\'entreprise avec succès', companyId, userId };
   }
 
   @Get('employees')

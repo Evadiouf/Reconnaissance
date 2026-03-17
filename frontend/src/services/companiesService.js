@@ -129,6 +129,18 @@ export const companiesService = {
     return response.data;
   },
 
+  /** Rattacher un employé existant à mon entreprise (réparation erreur "n'appartient pas à cette entreprise") */
+  async attachEmployeeToMyCompany(userId) {
+    const response = await apiClient.post(`${COMPANIES_ENDPOINT}/my/employees/${encodeURIComponent(userId)}`);
+    return response.data;
+  },
+
+  /** Supprimer définitivement une entreprise (company + employés + pointages + photos Naratech) */
+  async deleteCompany(companyId) {
+    const response = await apiClient.delete(`${COMPANIES_ENDPOINT}/${encodeURIComponent(companyId)}`);
+    return response.data;
+  },
+
   async getCompanyEmployees() {
     try {
       const response = await apiClient.get(`${COMPANIES_ENDPOINT}/employees`);

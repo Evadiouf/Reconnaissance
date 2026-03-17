@@ -234,7 +234,6 @@ function Dashboard() {
               </h2>
               <p className="font-['Instrument_Sans',sans-serif] text-base text-[#5A6565]">Voici un aperçu de l'activité de votre entreprise aujourd'hui</p>
             </div>
-            <button className="px-6 py-2.5 rounded-2xl bg-[#0389A6] text-white font-['Instrument_Sans',sans-serif]">Actions rapide</button>
           </div>
 
           {/* KPI row */}

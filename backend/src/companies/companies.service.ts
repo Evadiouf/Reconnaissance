@@ -1,20 +1,26 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Company } from './schemas/company.schema';
+import { User } from '../users/schemas/user.schema';
+import { TimeEntry } from '../attendance/schemas/time-entry.schema';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { InviteRHDto } from './dto/invite-rh.dto';
 import { EmailService } from '../email/email.service';
 import { InvitationsService } from '../invitations/invitations.service';
+import { FaceRecognitionService } from '../face-recognition/face-recognition.service';
 
 @Injectable()
 export class CompaniesService {
   constructor(
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(TimeEntry.name) private readonly timeEntryModel: Model<TimeEntry>,
     private readonly emailService: EmailService,
     private readonly invitationsService: InvitationsService,
     private readonly configService: ConfigService,
+    private readonly faceRecognitionService: FaceRecognitionService,
   ) {}
 
   async create(dto: CreateCompanyDto, ownerId: string): Promise<Company> {
@@ -253,5 +259,87 @@ export class CompaniesService {
       owner: company.owner ? normalizeUser(company.owner) : null,
       employees: (company.employees || []).map(normalizeUser),
     }));
+  }
+
+  /**
+   * Supprime définitivement une entreprise et tout ce qui lui est lié :
+   *  - photos des employés côté Naratech (serveur de reconnaissance)
+   *  - tous les pointages (time entries)
+   *  - les utilisateurs employés de l'entreprise (non-owner sans autre entreprise)
+   *  - le document Company
+   */
+  async deleteCompany(companyId: string, requesterUserId: string): Promise<{ deleted: boolean }> {
+    const oid = new Types.ObjectId(companyId);
+    const company = await this.companyModel
+      .findById(oid)
+      .populate('employees')
+      .exec();
+
+    if (!company) {
+      throw new NotFoundException('Entreprise introuvable');
+    }
+
+    // Owner, admin ou superadmin peuvent supprimer
+    const isOwner = (company.owner as any)?.toString() === requesterUserId || company.owner?.toString() === requesterUserId;
+    if (!isOwner) {
+      const requesterUser = await this.userModel.findById(new Types.ObjectId(requesterUserId)).exec();
+      const roles: string[] = Array.isArray((requesterUser as any)?.roles) ? (requesterUser as any).roles : [];
+      const isPrivileged = roles.includes('superadmin') || roles.includes('admin');
+      if (!isPrivileged) {
+        throw new ForbiddenException('Vous n\'êtes pas autorisé à supprimer cette entreprise');
+      }
+    }
+
+    const companyObjectId = new Types.ObjectId(companyId);
+
+    // 1. Récupérer tous les IDs employés (owner + employees)
+    const employeeIds: string[] = [];
+    if (company.owner) employeeIds.push(company.owner.toString());
+    for (const emp of company.employees || []) {
+      const empId = (emp as any)?._id?.toString() || emp?.toString();
+      if (empId) employeeIds.push(empId);
+    }
+
+    // 2. Supprimer les photos Naratech de chaque employé
+    for (const empId of employeeIds) {
+      try {
+        await this.faceRecognitionService.deleteEmployeeTrainingImage(empId);
+        console.log(`🗑️ Photo Naratech supprimée pour l'employé ${empId}`);
+      } catch (err: any) {
+        console.warn(`⚠️ Photo Naratech non supprimée pour ${empId}:`, err?.message);
+      }
+    }
+
+    // 3. Supprimer tous les pointages de l'entreprise
+    const { deletedCount: entriesDeleted } = await this.timeEntryModel
+      .deleteMany({ company: companyObjectId })
+      .exec();
+    console.log(`🗑️ ${entriesDeleted} pointage(s) supprimé(s) pour l'entreprise ${companyId}`);
+
+    // 4. Supprimer les utilisateurs employés (non-owners sans autre entreprise)
+    for (const empId of employeeIds) {
+      if (empId === (company.owner as any)?.toString()) continue; // ne pas supprimer le owner
+      try {
+        const hasOtherCompany = await this.companyModel.exists({
+          _id: { $ne: companyObjectId },
+          $or: [
+            { owner: new Types.ObjectId(empId) },
+            { employees: new Types.ObjectId(empId) },
+          ],
+        });
+        if (!hasOtherCompany) {
+          await this.userModel.deleteOne({ _id: new Types.ObjectId(empId) }).exec();
+          console.log(`🗑️ Utilisateur employé supprimé: ${empId}`);
+        }
+      } catch (err: any) {
+        console.warn(`⚠️ Utilisateur ${empId} non supprimé:`, err?.message);
+      }
+    }
+
+    // 5. Supprimer le document Company
+    await this.companyModel.deleteOne({ _id: companyObjectId }).exec();
+    console.log(`✅ Entreprise ${companyId} supprimée définitivement`);
+
+    return { deleted: true };
   }
 }

@@ -663,16 +663,16 @@ function Employes() {
           }
           
           try {
-            console.log('🔵 Appel API pour créer l\'employé:', userData);
+            // 1) Enregistrement en base de données (backend → MongoDB, db MONGO_DB_NAME, collection "users")
+            console.log('🔵 Appel API pour créer l\'employé en base:', userData);
             const createdUser = await usersService.createEmployee(userData);
             console.log('📥 Réponse de l\'API:', createdUser);
             
-            // Utiliser l'ID de l'API si disponible
             if (createdUser._id || createdUser.id) {
               const mongoId = (createdUser._id || createdUser.id).toString();
               newEmployee.id = mongoId;
               newEmployee._id = mongoId;
-              console.log('✅ Employé créé dans l\'API avec ID MongoDB:', mongoId);
+              console.log('✅ Employé enregistré en base de données (ID MongoDB):', mongoId);
               createdInDb = true;
             } else {
               console.error('❌ L\'API n\'a pas retourné d\'ID MongoDB!');
@@ -720,15 +720,20 @@ function Employes() {
       return;
     }
 
-    // Enregistrer la photo dans l'API Naratech si disponible
+    // 2) Enregistrer la photo sur le serveur (API Naratech) pour la reconnaissance faciale au pointage
     if (profileImage || profileImagePreview) {
       try {
         const imageSource = profileImage || profileImagePreview;
         const faceEmployeeId = mongoIdCandidate;
         await faceRecognitionService.registerEmployeeFace(faceEmployeeId, employeeName, imageSource);
-        console.log(`✅ Photo de ${employeeName} (employee_id: ${faceEmployeeId}) enregistrée dans l'API Naratech`);
+        console.log(`✅ Photo de ${employeeName} (employee_id: ${faceEmployeeId}) enregistrée sur le serveur de reconnaissance (Naratech)`);
       } catch (error) {
-        console.error('⚠️ Erreur lors de l\'enregistrement de la photo dans l\'API Naratech:', error);
+        console.error('⚠️ Erreur lors de l\'enregistrement de la photo sur le serveur (Naratech):', error);
+        alert(
+          'L\'employé a été créé mais la photo n\'a pas pu être enregistrée sur le serveur. ' +
+          'Le pointage par reconnaissance faciale ne fonctionnera pas pour cet employé tant que la photo n\'est pas enregistrée. ' +
+          'Vous pouvez modifier l\'employé et ré-enregistrer sa photo.'
+        );
       }
     }
 
@@ -865,16 +870,19 @@ function Employes() {
         return;
       }
 
-      // Supprimer du state et localStorage
+      // Retirer de la liste locale et du cache (tout doit disparaître)
+      const deletedId = String(employeeToDelete.id || employeeToDelete._id || '');
       setEmployees(prev => {
-        const updated = prev.filter(emp => emp.id !== employeeToDelete.id);
+        const updated = prev.filter(
+          (emp) => String(emp.id || emp._id || '') !== deletedId
+        );
         syncLocalStorage(updated);
         return updated;
       });
       
       setIsDeleteModalOpen(false);
       setEmployeeToDelete(null);
-      alert('Employé supprimé avec succès !');
+      alert('Employé supprimé définitivement (base de données, entreprise et photos sur le serveur).');
     } catch (error) {
       console.error('❌ Erreur lors de la suppression:', error);
       alert('Erreur lors de la suppression de l\'employé');
@@ -2308,7 +2316,7 @@ function Employes() {
 
             {/* Message d'avertissement */}
             <p className="font-instrument text-sm text-[#5A6565] text-center mb-6">
-              Cette action est irréversible et supprimera toutes les données associées à cet employé.
+              Cette action est irréversible. Seront supprimés : le compte employé en base, son rattachement à l'entreprise et ses photos sur le serveur de reconnaissance (plus de doublons ni de reconnaissance pour cet employé).
             </p>
 
             {/* Boutons */}

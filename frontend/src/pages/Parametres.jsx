@@ -8,6 +8,7 @@ import authService from '../services/authService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { getUserData, updateUserData, onUserDataUpdate } from '../services/userDataService';
+import usersService from '../services/usersService';
 import { 
   getCurrentSessionInfo, 
   getActiveSessions, 
@@ -851,7 +852,19 @@ function Parametres() {
                   <button
                     onClick={async () => {
                       try {
-                        // Utiliser le service centralisé pour mettre à jour les données
+                        // 1. Sauvegarder en base de données via l'API
+                        const nameParts = (profileData.fullName || '').trim().split(' ');
+                        const firstName = nameParts[0] || '';
+                        const lastName = nameParts.slice(1).join(' ') || '';
+
+                        await usersService.updateMyProfile({
+                          firstName,
+                          lastName,
+                          phone: profileData.phone,
+                          department: profileData.department,
+                        });
+
+                        // 2. Mettre à jour le localStorage pour cohérence locale
                         updateUserData({
                           nomComplet: profileData.fullName,
                           fullName: profileData.fullName,
@@ -863,12 +876,12 @@ function Parametres() {
                           language: profileData.language,
                           nomEntreprise: profileData.nomEntreprise
                         });
-                        
-                        console.log('Modifications enregistrées:', profileData);
+
                         alert(t('Modifications enregistrées avec succès !') || 'Modifications enregistrées avec succès !');
                       } catch (error) {
                         console.error('Erreur lors de l\'enregistrement:', error);
-                        alert('Une erreur est survenue lors de l\'enregistrement');
+                        const msg = error?.response?.data?.message || error?.message || 'Erreur lors de l\'enregistrement';
+                        alert(`Erreur : ${msg}`);
                       }
                     }}
                     className="px-4 py-2.5 bg-[#0389A6] text-white rounded-2xl font-instrument text-base leading-[19.52px] hover:bg-[#027A94] transition-colors cursor-pointer"

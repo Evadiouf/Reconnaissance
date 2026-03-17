@@ -227,11 +227,9 @@ function Entreprises() {
       const companyName = company.name || 'Sans nom';
       const employeesArray = Array.isArray(company.employees) ? company.employees : [];
       const employeesCount =
-        employeesArray.length > 0
-          ? employeesArray.length
-          : typeof company.employeeCount === 'number'
-            ? company.employeeCount
-            : 0;
+        typeof company.employeeCount === 'number' && company.employeeCount > 0
+          ? company.employeeCount
+          : employeesArray.length;
       
       // Extraire le nom du secteur depuis le type peuplé
       let sectorName = 'Non spécifié';
@@ -1665,23 +1663,27 @@ function Entreprises() {
               </button>
               <button
                 type="button"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  
-                  // Supprimer l'entreprise
-                  setCompanies(prevCompanies => prevCompanies.filter(company => company.id !== companyToDelete.id));
-                  
-                  console.log('Entreprise supprimée:', companyToDelete.id);
-                  
-                  // Fermer le modal
+
+                  const companyId = companyToDelete._id || companyToDelete.id;
+                  const companyName = companyToDelete.name;
+
                   setIsDeleteCompanyModalOpen(false);
                   setCompanyToDelete(null);
-                  
-                  // Afficher un message de succès (non-bloquant)
-                  setTimeout(() => {
-                    alert(`Entreprise "${companyToDelete.name}" supprimée définitivement !`);
-                  }, 100);
+
+                  try {
+                    await companiesService.deleteCompany(companyId);
+                    // Retirer de la liste affichée
+                    setCompanies(prev =>
+                      prev.filter(c => (c._id || c.id) !== companyId)
+                    );
+                    alert(`Entreprise "${companyName}" supprimée définitivement (base de données, employés et photos).`);
+                  } catch (err) {
+                    const msg = err?.response?.data?.message || err?.message || 'Erreur lors de la suppression';
+                    alert(`Erreur : ${msg}`);
+                  }
                 }}
                 className="px-4 py-2.5 bg-[#D84343] text-white rounded-2xl hover:bg-[#C03A3A] transition-colors font-instrument text-base leading-[19.52px] cursor-pointer"
               >

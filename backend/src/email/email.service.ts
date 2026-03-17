@@ -75,12 +75,21 @@ export class EmailService {
         errorMessage = error.message;
       }
 
-      this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body || error, null, 2));
+      try {
+        this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body ?? { message: error.message, statusCode: error.statusCode }, null, 2));
+      } catch (_) {
+        this.logger.error('Mailjet error details (unserializable):', error.statusCode ?? error.message);
+      }
 
       if (errorMessage.includes('not verified') || errorMessage.includes('Sender address')) {
         errorMessage = "L'adresse email d'envoi n'est pas vérifiée dans Mailjet.";
-      } else if (errorMessage.includes('Invalid API key') || errorMessage.includes('Unauthorized')) {
-        errorMessage = 'Les clés API Mailjet sont invalides.';
+      } else if (
+        errorMessage.includes('Invalid API key') ||
+        errorMessage.includes('Unauthorized') ||
+        errorMessage.includes('authentication/authorization failure') ||
+        error.statusCode === 401
+      ) {
+        errorMessage = 'Les clés API Mailjet sont invalides ou expirées. Configurez MAILJET_API_KEY et MAILJET_API_SECRET dans le fichier .env.';
       } else if (errorMessage.includes('Rate limit') || errorMessage.includes('quota')) {
         errorMessage = "Limite d'envoi d'emails atteinte.";
       }
@@ -203,12 +212,21 @@ export class EmailService {
         errorMessage = error.message;
       }
 
-      this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body || error, null, 2));
+      try {
+        this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body ?? { message: error.message, statusCode: error.statusCode }, null, 2));
+      } catch (_) {
+        this.logger.error('Mailjet error details (unserializable):', error.statusCode ?? error.message);
+      }
 
       if (errorMessage.includes('not verified') || errorMessage.includes('Sender address')) {
         errorMessage = "L'adresse email d'envoi n'est pas vérifiée dans Mailjet.";
-      } else if (errorMessage.includes('Invalid API key') || errorMessage.includes('Unauthorized')) {
-        errorMessage = 'Les clés API Mailjet sont invalides.';
+      } else if (
+        errorMessage.includes('Invalid API key') ||
+        errorMessage.includes('Unauthorized') ||
+        errorMessage.includes('authentication/authorization failure') ||
+        error.statusCode === 401
+      ) {
+        errorMessage = 'Les clés API Mailjet sont invalides ou expirées.';
       } else if (errorMessage.includes('Rate limit') || errorMessage.includes('quota')) {
         errorMessage = "Limite d'envoi d'emails atteinte.";
       }
@@ -331,12 +349,21 @@ export class EmailService {
         errorMessage = error.message;
       }
 
-      this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body || error, null, 2));
+      try {
+        this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body ?? { message: error.message, statusCode: error.statusCode }, null, 2));
+      } catch (_) {
+        this.logger.error('Mailjet error details (unserializable):', error.statusCode ?? error.message);
+      }
 
       if (errorMessage.includes('not verified') || errorMessage.includes('Sender address')) {
         errorMessage = "L'adresse email d'envoi n'est pas vérifiée dans Mailjet.";
-      } else if (errorMessage.includes('Invalid API key') || errorMessage.includes('Unauthorized')) {
-        errorMessage = 'Les clés API Mailjet sont invalides.';
+      } else if (
+        errorMessage.includes('Invalid API key') ||
+        errorMessage.includes('Unauthorized') ||
+        errorMessage.includes('authentication/authorization failure') ||
+        error.statusCode === 401
+      ) {
+        errorMessage = 'Les clés API Mailjet sont invalides ou expirées.';
       } else if (errorMessage.includes('Rate limit') || errorMessage.includes('quota')) {
         errorMessage = "Limite d'envoi d'emails atteinte.";
       }
@@ -534,12 +561,21 @@ L'équipe Sen Pointage
         errorMessage = error.message;
       }
       
-      this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body || error, null, 2));
+      try {
+        this.logger.error('Mailjet error details:', JSON.stringify(error.response?.body ?? { message: error.message, statusCode: error.statusCode }, null, 2));
+      } catch (_) {
+        this.logger.error('Mailjet error details (unserializable):', error.statusCode ?? error.message);
+      }
       
       // Messages d'erreur plus explicites
       if (errorMessage.includes('not verified') || errorMessage.includes('Sender address')) {
         errorMessage = 'L\'adresse email d\'envoi n\'est pas vérifiée dans Mailjet. Veuillez vérifier votre domaine ou utiliser une adresse email vérifiée.';
-      } else if (errorMessage.includes('Invalid API key') || errorMessage.includes('Unauthorized')) {
+      } else if (
+        errorMessage.includes('Invalid API key') ||
+        errorMessage.includes('Unauthorized') ||
+        errorMessage.includes('authentication/authorization failure') ||
+        error.statusCode === 401
+      ) {
         errorMessage = 'Les clés API Mailjet sont invalides. Vérifiez votre configuration.';
       } else if (errorMessage.includes('Rate limit') || errorMessage.includes('quota')) {
         errorMessage = 'Limite d\'envoi d\'emails atteinte. Réessayez plus tard.';

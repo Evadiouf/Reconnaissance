@@ -231,7 +231,7 @@ function Contact() {
                   <div className="flex items-center gap-4">
                     <CallIcon />
                     <span className="font-instrument text-base text-[#0389A6] leading-[24px]">
-                      +221 33 XXX XX XX
+                      +221 77 589 78 90
                     </span>
                   </div>
                   <div className="flex items-center gap-4">

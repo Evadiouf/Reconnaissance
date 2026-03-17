@@ -99,6 +99,20 @@ const usersService = {
   deleteUser: async (userId) => usersService.delete(userId),
   getUser: async (userId) => usersService.getById(userId),
   getUsers: async () => usersService.getAll(),
+
+  /** Mettre à jour son propre profil (phone, department, firstName, lastName...) */
+  updateMyProfile: async ({ firstName, lastName, phone, department, position, location }) => {
+    const payload = {};
+    if (firstName !== undefined) payload.firstName = firstName;
+    if (lastName !== undefined) payload.lastName = lastName;
+    if (phone !== undefined) payload.phone = phone;
+    if (department !== undefined) payload.department = department;
+    if (position !== undefined) payload.position = position;
+    if (location !== undefined) payload.location = location;
+
+    const response = await apiClient.patch('/api/v1/users/me', payload);
+    return response.data;
+  },
 };
 
 export default usersService;

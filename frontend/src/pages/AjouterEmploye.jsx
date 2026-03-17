@@ -5,6 +5,7 @@ import usersService from '../services/usersService';
 import fileUploadService from '../services/fileUploadService';
 import companiesService from '../services/companiesService';
 import schedulesService from '../services/schedulesService';
+import faceRecognitionService from '../services/faceRecognitionService';
 
 function AjouterEmploye() {
   const navigate = useNavigate();
@@ -232,7 +233,24 @@ function AjouterEmploye() {
       }
 
       const createdUser = await usersService.createEmployee(userData);
-      console.log('✅ Utilisateur créé avec ID MongoDB:', createdUser._id || createdUser.id);
+      console.log('✅ Utilisateur créé en base de données (ID MongoDB):', createdUser._id || createdUser.id);
+
+      // Enregistrer la photo sur le serveur (Naratech) pour la reconnaissance faciale au pointage
+      if (profileImage || profileImagePreview) {
+        try {
+          const imageSource = profileImage || profileImagePreview;
+          const employeeId = (createdUser._id || createdUser.id).toString();
+          const employeeName = formData.nomComplet.trim();
+          await faceRecognitionService.registerEmployeeFace(employeeId, employeeName, imageSource);
+          console.log('✅ Photo enregistrée sur le serveur de reconnaissance (Naratech)');
+        } catch (photoErr) {
+          console.error('⚠️ Photo non enregistrée sur le serveur:', photoErr);
+          alert(
+            'Employé créé en base mais la photo n\'a pas pu être enregistrée sur le serveur. ' +
+            'Le pointage par reconnaissance ne fonctionnera pas tant que la photo n\'est pas enregistrée (modifiez l\'employé depuis la page Employés).'
+          );
+        }
+      }
 
       // Sauvegarder aussi localement pour l'affichage immédiat (optionnel)
       const employeesKey = companyId ? `employees:${companyId}` : 'employees';

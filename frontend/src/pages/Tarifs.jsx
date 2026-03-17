@@ -721,7 +721,7 @@ function Tarifs() {
                     </svg>
                   </div>
                   <span className="font-['Instrument_Sans',sans-serif] text-base leading-[1.5] text-[#5A6565]">
-                    +221 33 XXX XX XX
+                    +221 77 589 78 90
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -778,7 +778,7 @@ function Tarifs() {
                       </svg>
                     </div>
                     <span className="font-['Instrument_Sans',sans-serif] text-base leading-[1.5] text-[#0389A6]">
-                      +221 33 XXX XX XX
+                      +221 77 589 78 90
                     </span>
                   </div>
                   <div className="flex items-center gap-4">

@@ -1,3 +1,8 @@
+/**
+ * Service de reconnaissance faciale (proxy vers l'API Naratech).
+ * Le modèle et les photos d'entraînement (visages des employés) sont stockés côté serveur (Naratech).
+ * La reconnaissance au pointage ne peut fonctionner que si les employés et leurs photos sont enregistrés sur ce serveur.
+ */
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';

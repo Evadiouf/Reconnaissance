@@ -2,6 +2,7 @@ import { Injectable, ConflictException, BadRequestException, ForbiddenException 
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User } from './schemas/user.schema';
+import { TimeEntry } from '../attendance/schemas/time-entry.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InvitationsService } from '../invitations/invitations.service';
 import { RHInvitation } from '../invitations/schemas/rh-invitation.schema';
@@ -11,20 +12,28 @@ import { CompanyInvitation, CompanyInvitationStatus } from '../company-invitatio
 import { CompanySubscriptionsService } from '../company-subscriptions/company-subscriptions.service';
 import { CompanyTypesService } from '../companies/company-types.service';
 import { SchedulesService } from '../schedules/schedules.service';
+import { FaceRecognitionService } from '../face-recognition/face-recognition.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(TimeEntry.name) private readonly timeEntryModel: Model<TimeEntry>,
     private readonly invitationsService: InvitationsService,
     private readonly companiesService: CompaniesService,
     private readonly companyInvitationsService: CompanyInvitationsService,
     private readonly companySubscriptionsService: CompanySubscriptionsService,
     private readonly companyTypesService: CompanyTypesService,
     private readonly schedulesService: SchedulesService,
+    private readonly faceRecognitionService: FaceRecognitionService,
   ) {}
 
+  /**
+   * Crée un employé : enregistré en base MongoDB (db = MONGO_DB_NAME, collection "users")
+   * puis rattaché à l'entreprise (collection "companies", champ employees).
+   * La photo du visage est enregistrée côté frontend via l'API face-recognition/register → serveur Naratech.
+   */
   async createEmployee(requesterUserId: string, dto: CreateUserDto): Promise<Omit<User, 'password'>> {
     const email = (dto.email || '').trim().toLowerCase();
     if (!email) {
@@ -93,9 +102,11 @@ export class UsersService {
 
     const created = new this.userModel(userData);
     const saved = await created.save();
+    // Employé bien inséré en base (collection "users" de la db MONGO_DB_NAME)
 
     try {
       await this.companiesService.addEmployeeToCompany(companyId, (saved as any)._id.toString());
+      // Rattachement enregistré (collection "companies", champ employees)
     } catch (err: any) {
       throw new BadRequestException(
         `Employé créé mais rattachement à l'entreprise impossible (companyId=${companyId}). ${err?.message || ''}`.trim(),
@@ -197,6 +208,8 @@ export class UsersService {
         lastName: dto.lastName,
         email: dto.email.toLowerCase(),
         password: hashed,
+        ...(dto.phone ? { phone: dto.phone.trim() } : {}),
+        ...(dto.department ? { department: dto.department.trim() } : {}),
       };
 
       // Si une invitation est valide, assigner le rôle
@@ -462,6 +475,35 @@ export class UsersService {
     return obj as any;
   }
 
+  async updateMyProfile(
+    userId: string,
+    patch: { firstName?: string; lastName?: string; phone?: string; department?: string; position?: string; location?: string },
+  ): Promise<Omit<User, 'password'>> {
+    const allowed: any = {};
+    if (patch.firstName !== undefined) allowed.firstName = String(patch.firstName).trim();
+    if (patch.lastName !== undefined) allowed.lastName = String(patch.lastName).trim();
+    if (patch.phone !== undefined) allowed.phone = String(patch.phone).trim();
+    if (patch.department !== undefined) allowed.department = String(patch.department).trim();
+    if (patch.position !== undefined) allowed.position = String(patch.position).trim();
+    if (patch.location !== undefined) allowed.location = String(patch.location).trim();
+
+    if (Object.keys(allowed).length === 0) {
+      throw new BadRequestException('Aucun champ à mettre à jour');
+    }
+
+    const updated = await this.userModel
+      .findByIdAndUpdate(new Types.ObjectId(userId), { $set: allowed }, { new: true })
+      .exec();
+
+    if (!updated) {
+      throw new BadRequestException('Utilisateur introuvable');
+    }
+
+    const obj = (updated as any).toObject?.() ?? updated;
+    delete (obj as any).password;
+    return obj as any;
+  }
+
   async deleteUserById(
     requesterUserId: string,
     targetUserId: string,
@@ -481,10 +523,29 @@ export class UsersService {
       throw new ForbiddenException('Impossible de supprimer le propriétaire de l\'entreprise');
     }
 
+    // Supprimer les photos/visages du serveur (Naratech) pour éviter doublons et reconnaissance sur un employé supprimé
+    try {
+      await this.faceRecognitionService.deleteEmployeeTrainingImage(targetUserId);
+    } catch (err: any) {
+      // Ne pas bloquer la suppression : l'employé peut ne pas avoir de photo enregistrée (404, etc.)
+      console.warn(
+        `[UsersService.deleteUserById] Photo(s) non supprimée(s) côté Naratech pour ${targetUserId}:`,
+        err?.message || err,
+      );
+    }
+
     try {
       await this.companiesService.removeEmployeeFromCompany(companyId, targetUserId);
     } catch {
       // Ne pas bloquer
+    }
+
+    // Supprimer tous les pointages de cet employé (tout doit disparaître)
+    const deleteEntriesResult = await this.timeEntryModel
+      .deleteMany({ user: new Types.ObjectId(targetUserId) })
+      .exec();
+    if (deleteEntriesResult.deletedCount > 0) {
+      console.log(`[UsersService.deleteUserById] ${deleteEntriesResult.deletedCount} pointage(s) supprimé(s) pour ${targetUserId}`);
     }
 
     await this.userModel.deleteOne({ _id: new Types.ObjectId(targetUserId) }).exec();

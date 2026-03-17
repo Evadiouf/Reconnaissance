@@ -1,7 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-@Schema({ timestamps: true })
+/** Collection MongoDB "users" (base MONGO_DB_NAME). Tous les employés créés y sont insérés. */
+@Schema({ timestamps: true, collection: 'users' })
 export class User extends Document {
   @Prop({ required: true })
   lastName: string;

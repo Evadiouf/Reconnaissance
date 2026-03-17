@@ -57,8 +57,14 @@ export class AttendanceService {
     try {
       await this.ensureUserInCompany(targetUserId, companyId);
     } catch (err: any) {
-      // Réparation: si la personne reconnue (target) n'est pas dans l'entreprise mais que le requester
-      // est autorisé (pointage pour un autre = RH/admin), tenter de la rattacher une fois.
+      const targetCompanyId = await this.companiesService.findCompanyIdByUserId(targetUserId);
+      console.warn('⚠️ [Attendance] Personne reconnue pas dans cette entreprise', {
+        companyIdPointage: companyId,
+        targetUserId,
+        targetEstDansAutreEntreprise: targetCompanyId ?? false,
+      });
+
+      // Réparation: rattacher la personne reconnue à l'entreprise du requester
       try {
         await this.companiesService.addEmployeeToCompany(companyId, targetUserId);
         console.log('🔧 [Attendance] Employé rattaché à l\'entreprise (réparation)', { targetUserId, companyId });
@@ -71,7 +77,16 @@ export class AttendanceService {
           message: err?.message,
           repairMessage: repairErr?.message,
         });
-        throw err;
+        const repairMsg = repairErr?.message || repairErr?.response?.message || '';
+        const isCompanyNotFound = repairMsg.includes('introuvable') || repairErr?.status === 404;
+        if (isCompanyNotFound) {
+          throw new ForbiddenException(
+            "La personne reconnue n'appartient pas à cette entreprise. L'entreprise de votre session est introuvable — déconnectez-vous et reconnectez-vous, puis réessayez.",
+          );
+        }
+        throw new ForbiddenException(
+          `La personne reconnue n'appartient pas à cette entreprise. Rattachement automatique échoué: ${repairMsg || 'erreur inconnue'}. Réessayez ou rattachez l'employé depuis la page Employés.`,
+        );
       }
     }
   }

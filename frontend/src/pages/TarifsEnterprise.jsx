@@ -172,7 +172,7 @@ function TarifsEnterprise() {
                     </svg>
                   </div>
                   <span className="font-['Instrument_Sans',sans-serif] text-base text-[#0389A6]">
-                    +221 33 XXX XX XX
+                    +221 77 589 78 90
                   </span>
                 </div>
                 
