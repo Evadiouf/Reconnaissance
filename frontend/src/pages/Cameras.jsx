@@ -6,6 +6,7 @@ import ProfileDropdown from '../components/ProfileDropdown';
 import cameraIconPause from '../assets/images/camera-icon-pause.svg';
 import authService from '../services/authService';
 import cameraSyncService from '../services/cameraSyncService';
+import cameraStreamService from '../services/cameraStreamService';
 
 function Cameras() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1255,28 +1256,50 @@ function Cameras() {
                   </div>
 
                   {/* Zone de visualisation vidéo */}
-                  <div className="relative bg-[#002222] border border-[#D4DCDC] rounded-2xl flex flex-col justify-between items-center px-5 py-[10px]" style={{ height: '361px' }}>
-                    {/* Badge Pause en haut à droite */}
-                    <div className="absolute top-5 right-5 flex items-center gap-1.5 px-[6px] py-0.5 pr-2.5 bg-white rounded-md">
-                      <div className="w-1.5 h-1.5 bg-[#0389A6] rounded-full"></div>
-                      <span className="font-instrument text-xs font-medium text-[#002222] leading-[18px]">Pause</span>
-                    </div>
+                  <div className="relative bg-[#002222] border border-[#D4DCDC] rounded-2xl overflow-hidden" style={{ height: '361px' }}>
 
-                    {/* Contenu central */}
-                    <div className="flex flex-col justify-center items-center gap-4 flex-1">
-                      {/* Icône caméra avec opacité */}
-                      <div className="opacity-60">
-                        <img src={cameraIconPause} alt="Caméra" width="50" height="50" />
-                      </div>
-                      
-                      {/* Textes */}
-                      <div className="flex flex-col justify-center items-center gap-0">
-                        <span className="font-instrument text-base font-semibold text-white leading-[24px]">Caméra en pause</span>
-                        <span className="font-instrument text-base font-normal text-[#ECEFEF] leading-[26px]">
-                          Cliquez sur Démarrer pour activer la reconnaissance
-                        </span>
-                      </div>
-                    </div>
+                    {/* CAS 1 : flux vidéo en direct */}
+                    {isVideoPlaying && selectedCamera ? (
+                      <>
+                        {/* Badge En direct */}
+                        <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 px-[6px] py-0.5 pr-2.5 bg-white rounded-md">
+                          <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>
+                          <span className="font-instrument text-xs font-medium text-[#002222] leading-[18px]">En direct</span>
+                        </div>
+                        {/* Élément vidéo branché sur le backend */}
+                        <video
+                          key={selectedCamera.id}
+                          src={cameraStreamService.getStreamUrl(selectedCamera.id, selectedCamera)}
+                          autoPlay
+                          muted
+                          playsInline
+                          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                          onError={(e) => {
+                            console.error('Erreur flux vidéo:', e);
+                            setIsVideoPlaying(false);
+                          }}
+                        />
+                      </>
+                    ) : (
+                      /* CAS 2 : écran de pause (état initial) */
+                      <>
+                        <div className="absolute top-4 right-4 flex items-center gap-1.5 px-[6px] py-0.5 pr-2.5 bg-white rounded-md">
+                          <div className="w-1.5 h-1.5 bg-[#0389A6] rounded-full"></div>
+                          <span className="font-instrument text-xs font-medium text-[#002222] leading-[18px]">Pause</span>
+                        </div>
+                        <div className="flex flex-col justify-center items-center gap-4 w-full h-full">
+                          <div className="opacity-60">
+                            <img src={cameraIconPause} alt="Caméra" width="50" height="50" />
+                          </div>
+                          <div className="flex flex-col justify-center items-center gap-0">
+                            <span className="font-instrument text-base font-semibold text-white leading-[24px]">Caméra en pause</span>
+                            <span className="font-instrument text-base font-normal text-[#ECEFEF] leading-[26px]">
+                              {selectedCamera ? 'Cliquez sur Lecture pour démarrer le flux' : 'Sélectionnez une caméra puis cliquez sur Lecture'}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Boutons de contrôle */}
@@ -1284,10 +1307,14 @@ function Cameras() {
                     {/* Bouton Lecture */}
                     <button
                       onClick={() => {
+                        if (!selectedCamera) {
+                          alert('Veuillez d\'abord sélectionner une caméra dans la liste.');
+                          return;
+                        }
                         setIsVideoPlaying(true);
-                        console.log('Lecture du flux vidéo');
                       }}
-                      className="flex items-center justify-center gap-2.5 px-4 py-2.5 border border-[#D4DCDC] rounded-2xl bg-white hover:bg-[#ECEFEF] transition-colors"
+                      disabled={isVideoPlaying}
+                      className={`flex items-center justify-center gap-2.5 px-4 py-2.5 border border-[#D4DCDC] rounded-2xl transition-colors ${isVideoPlaying ? 'bg-[#ECEFEF] opacity-50 cursor-not-allowed' : 'bg-white hover:bg-[#ECEFEF]'}`}
                     >
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M5 4.5L19 12L5 19.5V4.5Z" fill="#002222"/>
@@ -1297,11 +1324,9 @@ function Cameras() {
 
                     {/* Bouton Pause */}
                     <button
-                      onClick={() => {
-                        setIsVideoPlaying(false);
-                        console.log('Pause du flux vidéo');
-                      }}
-                      className="flex items-center justify-center gap-2.5 px-4 py-2.5 border border-[#D4DCDC] rounded-2xl bg-white hover:bg-[#ECEFEF] transition-colors"
+                      onClick={() => setIsVideoPlaying(false)}
+                      disabled={!isVideoPlaying}
+                      className={`flex items-center justify-center gap-2.5 px-4 py-2.5 border border-[#D4DCDC] rounded-2xl transition-colors ${!isVideoPlaying ? 'bg-[#ECEFEF] opacity-50 cursor-not-allowed' : 'bg-white hover:bg-[#ECEFEF]'}`}
                     >
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="6" y="4.5" width="6" height="15" fill="#002222"/>
@@ -1313,8 +1338,10 @@ function Cameras() {
                     {/* Bouton Capture d'écran */}
                     <button
                       onClick={() => {
-                        // Logique de capture d'écran
-                        console.log('Capture d\'écran');
+                        if (!isVideoPlaying) {
+                          alert('Démarrez le flux vidéo avant de faire une capture.');
+                          return;
+                        }
                         const timestamp = new Date().toLocaleString('fr-FR');
                         alert(`Capture d'écran effectuée !\nDate: ${timestamp}`);
                       }}
