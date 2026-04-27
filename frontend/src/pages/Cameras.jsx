@@ -689,6 +689,7 @@ function Cameras() {
                             ip: ipParts.length > 0 ? ipParts[0] : (camera.ip || ''),
                             port: ipParts.length > 1 ? ipParts[1] : '',
                             rtspUrl: camera.rtspUrl || '',
+                            hlsUrl: camera.hlsUrl || '',
                             webcamDeviceId: camera.webcamDeviceId || '',
                             username: camera.username || '',
                             password: camera.password || '',
@@ -1828,6 +1829,7 @@ function Cameras() {
                         ? `${addFormData.ip}:${addFormData.port}` : null,
                       rtspUrl: (addFormData.type === 'RTSP' || (addFormData.type === 'Autre' && addFormData.autreMode === 'ip'))
                         ? (addFormData.rtspUrl?.trim() || null) : null,
+                      hlsUrl: addFormData.hlsUrl?.trim() || null,
                       webcamDeviceId: (addFormData.type === 'WEBCAM' || (addFormData.type === 'Autre' && addFormData.autreMode === 'webcam'))
                         ? (addFormData.webcamDeviceId || null) : null,
                       webcamLabel: (addFormData.type === 'WEBCAM' || (addFormData.type === 'Autre' && addFormData.autreMode === 'webcam'))
@@ -2360,6 +2362,7 @@ function Cameras() {
                             ? `${editFormData.ip}:${editFormData.port}` : null,
                           rtspUrl: (editFormData.type === 'RTSP' || (editFormData.type === 'Autre' && editFormData.autreMode === 'ip'))
                             ? (editFormData.rtspUrl?.trim() || null) : null,
+                          hlsUrl: editFormData.hlsUrl?.trim() || null,
                           webcamDeviceId: (editFormData.type === 'WEBCAM' || (editFormData.type === 'Autre' && editFormData.autreMode === 'webcam'))
                             ? (editFormData.webcamDeviceId || null) : null,
                           webcamLabel: (editFormData.type === 'WEBCAM' || (editFormData.type === 'Autre' && editFormData.autreMode === 'webcam'))
