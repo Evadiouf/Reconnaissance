@@ -406,29 +406,33 @@ const AttendanceFaceCapture = ({
   // Arrêter la caméra (webcam ou IP)
   const stopCamera = () => {
     setIsConnecting(false);
-    if (cameraType === 'ip' && selectedCamera) {
-      // Détruire l'instance HLS si présente
-      if (streamRef.current?._hls) {
-        streamRef.current._hls.destroy();
-        streamRef.current = null;
-      }
-      if (videoRef.current) {
+
+    // Détruire l'instance HLS si présente (priorité absolue)
+    if (streamRef.current?._hls) {
+      try { streamRef.current._hls.destroy(); } catch (_) {}
+      streamRef.current = null;
+    }
+
+    // Arrêter les pistes webcam si c'est un MediaStream
+    if (streamRef.current && typeof streamRef.current.getTracks === 'function') {
+      streamRef.current.getTracks().forEach(track => { try { track.stop(); } catch (_) {} });
+      streamRef.current = null;
+    }
+
+    // Nettoyer l'élément vidéo
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
         videoRef.current.src = '';
         videoRef.current.srcObject = null;
-      }
-      if (selectedCamera.id && !selectedCamera.hlsUrl) {
-        cameraStreamService.stopStream(selectedCamera.id).catch(() => {});
-      }
-    } else {
-      // Arrêter la webcam
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
+      } catch (_) {}
     }
+
+    // Arrêter le stream backend si IP publique (pas HLS)
+    if (cameraType === 'ip' && selectedCamera?.id && !selectedCamera?.hlsUrl) {
+      cameraStreamService.stopStream(selectedCamera.id).catch(() => {});
+    }
+
     setIsStreaming(false);
   };
 
