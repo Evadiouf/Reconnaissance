@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import Hls from 'hls.js';
 import faceRecognitionService from '../services/faceRecognitionService';
 import companiesService from '../services/companiesService';
 import cameraSyncService from '../services/cameraSyncService';
@@ -163,6 +164,18 @@ const AttendanceFaceCapture = ({
     loadEmployees();
   }, []);
 
+  // Vérifier si une IP est locale (non joignable depuis le cloud)
+  const isLocalIpAddress = (ipOrUrl) => {
+    if (!ipOrUrl) return false;
+    return (
+      /192\.168\./.test(ipOrUrl) ||
+      /^10\./.test(ipOrUrl) ||
+      /172\.(1[6-9]|2\d|3[01])\./.test(ipOrUrl) ||
+      /127\./.test(ipOrUrl) ||
+      /localhost/i.test(ipOrUrl)
+    );
+  };
+
   // Démarrer la caméra (webcam ou IP)
   const startCamera = async () => {
     console.log('🎥 Démarrage de la caméra...', { cameraType, selectedCamera });
@@ -183,14 +196,68 @@ const AttendanceFaceCapture = ({
         throw new Error('L\'élément vidéo n\'est pas disponible dans le DOM. Veuillez réessayer.');
       }
 
-      // Si c'est une caméra IP, utiliser le flux backend
+      // Si c'est une caméra IP, utiliser le flux HLS local (MediaMTX) ou le backend
       if (cameraType === 'ip' && selectedCamera) {
-        console.log('📹 Démarrage de la caméra IP:', selectedCamera.name);
+
+        // ── Priorité 1 : URL HLS locale (MediaMTX sur localhost) ──
+        if (selectedCamera.hlsUrl) {
+          console.log('📡 Utilisation du flux HLS local:', selectedCamera.hlsUrl);
+          setIsConnecting(true);
+          streamingStartedRef.current = false;
+
+          const video = videoRef.current;
+
+          const onReady = () => {
+            streamingStartedRef.current = true;
+            setIsConnecting(false);
+            setIsStreaming(true);
+            setError(null);
+          };
+
+          const onFail = () => {
+            setIsConnecting(false);
+            setIsStreaming(false);
+            setError(
+              `Impossible de lire le flux HLS "${selectedCamera.hlsUrl}".\n` +
+              'Vérifiez que MediaMTX est démarré sur ce PC (exécutez start.sh ou le service senpointage-kiosque).'
+            );
+          };
+
+          if (Hls.isSupported()) {
+            const hls = new Hls({ lowLatencyMode: true, maxBufferLength: 5 });
+            hls.loadSource(selectedCamera.hlsUrl);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); onReady(); });
+            hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) { hls.destroy(); onFail(); } });
+            streamRef.current = { _hls: hls }; // stocker pour nettoyage
+          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = selectedCamera.hlsUrl;
+            video.onloadedmetadata = () => { video.play().catch(() => {}); onReady(); };
+            video.onerror = onFail;
+          } else {
+            setError('Ce navigateur ne supporte pas HLS. Utilisez Chrome ou Edge.');
+            setIsConnecting(false);
+          }
+          return;
+        }
+
+        // ── Priorité 2 : vérifier IP locale (non accessible depuis le cloud) ──
+        const ipToCheck = selectedCamera.rtspUrl || selectedCamera.ip || '';
+        if (isLocalIpAddress(ipToCheck)) {
+          setError(
+            `⚠️ IP locale (${selectedCamera.ip || 'réseau local'}) — non accessible depuis le cloud.\n` +
+            'Configurez l\'URL HLS locale dans la fiche caméra (http://localhost:8888/camera/index.m3u8)\n' +
+            'après avoir lancé MediaMTX sur ce PC (voir script install.sh).'
+          );
+          return;
+        }
+
+        // ── Priorité 3 : flux via backend (IP publique) ──
+        console.log('📹 Démarrage de la caméra IP via backend:', selectedCamera.name);
         setIsConnecting(true);
         streamingStartedRef.current = false;
 
         try {
-          // Construire l'URL de streaming complète (inclut déjà le domaine + token)
           const streamUrl = cameraStreamService.getStreamUrl(selectedCamera.id, {
             ip: selectedCamera.ip,
             port: selectedCamera.port || 554,
@@ -340,16 +407,17 @@ const AttendanceFaceCapture = ({
   const stopCamera = () => {
     setIsConnecting(false);
     if (cameraType === 'ip' && selectedCamera) {
-      // Arrêter le flux IP
+      // Détruire l'instance HLS si présente
+      if (streamRef.current?._hls) {
+        streamRef.current._hls.destroy();
+        streamRef.current = null;
+      }
       if (videoRef.current) {
         videoRef.current.src = '';
         videoRef.current.srcObject = null;
       }
-      // Optionnel: appeler l'API pour arrêter le stream côté backend
-      if (selectedCamera.id) {
-        cameraStreamService.stopStream(selectedCamera.id).catch(err => {
-          console.warn('Erreur lors de l\'arrêt du stream backend:', err);
-        });
+      if (selectedCamera.id && !selectedCamera.hlsUrl) {
+        cameraStreamService.stopStream(selectedCamera.id).catch(() => {});
       }
     } else {
       // Arrêter la webcam

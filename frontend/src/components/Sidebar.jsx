@@ -49,6 +49,14 @@ const CameraIcon = () => (
   </svg>
 );
 
+const KiosqueIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.5"/>
+  </svg>
+);
+
 const SettingIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -101,6 +109,7 @@ function Sidebar() {
         { path: '/employes', labelKey: 'Employés', icon: <UserMultipleIcon /> },
         { path: '/horaires', labelKey: 'Horaires', icon: <CalendarIcon /> },
         { path: '/pointage', labelKey: 'Pointage', icon: <ClockIcon /> },
+        { path: '/kiosque', labelKey: 'Kiosque', icon: <KiosqueIcon /> },
         { path: '/suivi-presences', labelKey: 'Suivi des Présences', icon: <ChecklistIcon /> },
         { path: '/rapports', labelKey: 'Rapports', icon: <FileIcon /> },
         { path: '/cameras', labelKey: 'Caméras', icon: <CameraIcon /> },
@@ -114,6 +123,7 @@ function Sidebar() {
       'Employés': 'Employés',
       'Horaires': 'Horaires',
       'Pointage': 'Pointage',
+      'Kiosque': 'Kiosque',
       'Suivi des Présences': 'Suivi des Présences',
       'Rapports': 'Rapports',
       'Caméras': 'Caméras',

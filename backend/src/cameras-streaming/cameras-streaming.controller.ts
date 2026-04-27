@@ -103,6 +103,22 @@ export class CamerasStreamingController {
       // Construire l'URL RTSP
       const rtspUrlFinal = rtspUrl || this.streamingService.buildRtspUrl(cameraConfig);
 
+      // Détecter les IPs locales non joignables depuis un backend cloud
+      const isLocalIp = this.streamingService.isLocalIp(rtspUrlFinal);
+      if (isLocalIp) {
+        this.logger.warn(`IP locale détectée pour ${cameraId}: ${rtspUrlFinal.replace(/:[^:@]+@/, ':****@')}`);
+        return res.status(400).json({
+          success: false,
+          message:
+            'Caméra sur réseau local non joignable depuis le cloud. ' +
+            "L'IP de la caméra (192.168.x.x / 10.x.x.x) n'est accessible que sur votre réseau local. " +
+            'Pour utiliser la caméra depuis la plateforme en ligne, vous devez : ' +
+            '1) Configurer le port forwarding (port 554) sur votre routeur, ' +
+            '2) Utiliser votre IP publique (et non 192.168.x.x) dans la configuration de la caméra.',
+          errorType: 'LOCAL_IP',
+        });
+      }
+
       this.logger.log(`Démarrage du stream MJPEG pour ${cameraId} depuis ${rtspUrlFinal.replace(/:[^:@]+@/, ':****@')}`);
 
       // Configurer les headers pour le streaming MP4 fragmenté

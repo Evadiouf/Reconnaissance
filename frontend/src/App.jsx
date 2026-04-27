@@ -34,6 +34,7 @@ const TarifsEnterprise = lazy(() => import('./pages/TarifsEnterprise'));
 const Contact = lazy(() => import('./pages/Contact'));
 const SuiviPresences = lazy(() => import('./pages/SuiviPresences'));
 const MaintenanceVisages = lazy(() => import('./pages/MaintenanceVisages'));
+const Kiosque = lazy(() => import('./pages/Kiosque'));
 
 // Composant de chargement
 const LoadingFallback = () => (
@@ -106,6 +107,8 @@ function App() {
         <Route path="/suivi-presences" element={<ProtectedRoute><SuiviPresences /></ProtectedRoute>} />
         <Route path="/mon-profil" element={<ProtectedRoute><MonProfil /></ProtectedRoute>} />
         <Route path="/profil" element={<ProtectedRoute><MonProfil /></ProtectedRoute>} />
+        {/* Page kiosque automatique — plein écran, pour le PC à l'entrée du bâtiment */}
+        <Route path="/kiosque" element={<ProtectedRoute><Kiosque /></ProtectedRoute>} />
         <Route 
           path="/maintenance/visages" 
           element={

@@ -42,12 +42,13 @@ function Cameras() {
   const [editFormData, setEditFormData] = useState({
     name: '',
     type: 'IP',
-    customType: '', // Pour stocker le type personnalisé quand "Autre" est sélectionné
-    autreMode: 'webcam', // Mode de connexion pour "Autre": 'webcam' ou 'ip'
+    customType: '',
+    autreMode: 'webcam',
     location: '',
     ip: '',
     port: '',
     rtspUrl: '',
+    hlsUrl: '',
     webcamDeviceId: '',
     username: '',
     password: '',
@@ -57,12 +58,13 @@ function Cameras() {
   const [addFormData, setAddFormData] = useState({
     name: '',
     type: 'IP',
-    customType: '', // Pour stocker le type personnalisé quand "Autre" est sélectionné
-    autreMode: 'webcam', // Mode de connexion pour "Autre": 'webcam' ou 'ip'
+    customType: '',
+    autreMode: 'webcam',
     location: '',
     ip: '',
     port: '',
     rtspUrl: '',
+    hlsUrl: '',
     webcamDeviceId: '',
     username: '',
     password: '',
@@ -1584,9 +1586,37 @@ function Cameras() {
                     type="text"
                     value={addFormData.rtspUrl}
                     onChange={(e) => setAddFormData({ ...addFormData, rtspUrl: e.target.value })}
-                    placeholder="Ex: rtsp://user:pass@192.168.1.10:554/stream1"
+                    placeholder="Dahua: rtsp://admin:motdepasse@IP_PUBLIQUE:554/cam/realmonitor?channel=1&subtype=0"
                     className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
                   />
+                  <p className="px-2.5 text-xs text-[#5A6565] mt-1">
+                    <strong>Dahua :</strong> rtsp://admin:motdepasse@<strong>IP_PUBLIQUE</strong>:554/cam/realmonitor?channel=1&amp;subtype=0<br/>
+                    ⚠️ Utilisez votre <strong>IP publique</strong> (pas 192.168.x.x) pour que la caméra soit joignable depuis le cloud.
+                  </p>
+                  {/192\.168\.|^10\.|172\.(1[6-9]|2\d|3[01])\./.test(addFormData.rtspUrl) && (
+                    <p className="px-2.5 text-xs text-orange-600 font-semibold mt-1">
+                      ⚠️ IP locale détectée — remplacez 192.168.x.x par votre IP publique (visible sur monip.org) et configurez le port forwarding (port 554) sur votre routeur.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* URL HLS locale (Kiosque MediaMTX) */}
+              {(addFormData.type === 'RTSP' || addFormData.type === 'IP' || (addFormData.type === 'Autre' && addFormData.autreMode === 'ip')) && (
+                <div className="flex flex-col gap-0.5">
+                  <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                    URL HLS locale (Kiosque)
+                  </label>
+                  <input
+                    type="text"
+                    value={addFormData.hlsUrl}
+                    onChange={(e) => setAddFormData({ ...addFormData, hlsUrl: e.target.value })}
+                    placeholder="http://localhost:8888/camera/index.m3u8"
+                    className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                  />
+                  <p className="px-2.5 text-xs text-[#5A6565] mt-1">
+                    URL du flux HLS servi par <strong>MediaMTX</strong> sur le PC kiosque. Laissez vide si vous n'utilisez pas le mode kiosque automatique.
+                  </p>
                 </div>
               )}
 
@@ -2092,9 +2122,37 @@ function Cameras() {
                     type="text"
                     value={editFormData.rtspUrl}
                     onChange={(e) => setEditFormData({ ...editFormData, rtspUrl: e.target.value })}
-                    placeholder="Ex: rtsp://user:pass@192.168.1.10:554/stream1"
+                    placeholder="Dahua: rtsp://admin:motdepasse@IP_PUBLIQUE:554/cam/realmonitor?channel=1&subtype=0"
                     className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
                   />
+                  <p className="px-2.5 text-xs text-[#5A6565] mt-1">
+                    <strong>Dahua :</strong> rtsp://admin:motdepasse@<strong>IP_PUBLIQUE</strong>:554/cam/realmonitor?channel=1&amp;subtype=0<br/>
+                    ⚠️ Utilisez votre <strong>IP publique</strong> (pas 192.168.x.x) pour que la caméra soit joignable depuis le cloud.
+                  </p>
+                  {/192\.168\.|^10\.|172\.(1[6-9]|2\d|3[01])\./.test(editFormData.rtspUrl) && (
+                    <p className="px-2.5 text-xs text-orange-600 font-semibold mt-1">
+                      ⚠️ IP locale détectée — remplacez 192.168.x.x par votre IP publique (visible sur monip.org) et configurez le port forwarding (port 554) sur votre routeur.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* URL HLS locale (Kiosque MediaMTX) */}
+              {(editFormData.type === 'RTSP' || editFormData.type === 'IP' || (editFormData.type === 'Autre' && editFormData.autreMode === 'ip')) && (
+                <div className="flex flex-col gap-0.5">
+                  <label className="px-2.5 font-instrument text-base font-semibold text-[#002222] leading-[26px]">
+                    URL HLS locale (Kiosque)
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.hlsUrl}
+                    onChange={(e) => setEditFormData({ ...editFormData, hlsUrl: e.target.value })}
+                    placeholder="http://localhost:8888/camera/index.m3u8"
+                    className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-2xl px-[26px] py-2.5 font-instrument text-base text-[#002222] leading-[26px] placeholder:text-[#5A6565] focus:outline-none focus:ring-2 focus:ring-[#0389A6]"
+                  />
+                  <p className="px-2.5 text-xs text-[#5A6565] mt-1">
+                    URL du flux HLS servi par <strong>MediaMTX</strong> sur le PC kiosque. Laissez vide si vous n'utilisez pas le mode kiosque automatique.
+                  </p>
                 </div>
               )}
 

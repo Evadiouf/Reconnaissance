@@ -53,21 +53,38 @@ export class CamerasStreamingService extends EventEmitter implements OnModuleDes
       throw new Error('Adresse IP manquante pour la caméra');
     }
 
-    // Format RTSP standard pour caméras EZVIZ/Hikvision
-    const streamPaths = [
-      '/h264_stream',              // Chemin EZVIZ/Hikvision standard
-      '/Streaming/Channels/101',   // Chemin Hikvision alternatif
-      '/live',                     // Chemin générique
-      '/stream1',                  // Chemin alternatif
-    ];
+    // Chemin RTSP par défaut (Dahua / Hikvision compatibles)
+    // Dahua: /cam/realmonitor?channel=1&subtype=0
+    // Hikvision: /Streaming/Channels/101
+    // EZVIZ: /h264_stream
+    const defaultPath = '/cam/realmonitor?channel=1&subtype=0';
 
     // Si username/password sont fournis, les inclure dans l'URL
     if (camera.username && camera.password) {
       const auth = `${encodeURIComponent(camera.username)}:${encodeURIComponent(camera.password)}@`;
-      return `rtsp://${auth}${finalIp}:${finalPort}${streamPaths[0]}`;
+      return `rtsp://${auth}${finalIp}:${finalPort}${defaultPath}`;
     }
 
-    return `rtsp://${finalIp}:${finalPort}${streamPaths[0]}`;
+    return `rtsp://${finalIp}:${finalPort}${defaultPath}`;
+  }
+
+  /**
+   * Vérifie si une URL RTSP (ou une IP) correspond à un réseau local.
+   * Une IP locale n'est pas accessible depuis un backend hébergé dans le cloud.
+   */
+  isLocalIp(rtspUrlOrIp: string): boolean {
+    const localPatterns = [
+      /^rtsp:\/\/[^@]*@?192\.168\./,
+      /^rtsp:\/\/[^@]*@?10\./,
+      /^rtsp:\/\/[^@]*@?172\.(1[6-9]|2\d|3[01])\./,
+      /^rtsp:\/\/[^@]*@?127\./,
+      /^rtsp:\/\/[^@]*@?localhost/i,
+      /^192\.168\./,
+      /^10\./,
+      /^172\.(1[6-9]|2\d|3[01])\./,
+      /^127\./,
+    ];
+    return localPatterns.some((pattern) => pattern.test(rtspUrlOrIp));
   }
 
   /**
