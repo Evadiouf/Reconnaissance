@@ -565,10 +565,16 @@ const AttendanceFaceCapture = ({
     };
   }, []);
 
-  // Réattacher le stream si l'élément vidéo devient disponible
+  // Réattacher le stream si l'élément vidéo devient disponible (webcam uniquement)
   useEffect(() => {
-    if (isStreaming && streamRef.current && videoRef.current && !videoRef.current.srcObject) {
-      console.log('🔧 Réattachement du stream à l\'élément vidéo');
+    if (
+      isStreaming &&
+      streamRef.current &&
+      streamRef.current instanceof MediaStream &&
+      videoRef.current &&
+      !videoRef.current.srcObject
+    ) {
+      console.log('🔧 Réattachement du stream webcam à l\'élément vidéo');
       videoRef.current.srcObject = streamRef.current;
       videoRef.current.play().catch(err => {
         console.warn('⚠️ Erreur lors de la lecture automatique:', err);
