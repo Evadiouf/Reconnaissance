@@ -444,15 +444,22 @@ const AttendanceFaceCapture = ({
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
 
-    // Définir les dimensions du canvas
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Dimensions réelles de la vidéo (HLS ou webcam)
+    const w = video.videoWidth || video.clientWidth || 640;
+    const h = video.videoHeight || video.clientHeight || 480;
 
-    // Dessiner l'image de la vidéo sur le canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (w === 0 || h === 0) {
+      console.warn('⚠️ Dimensions vidéo nulles — flux pas encore prêt');
+      return null;
+    }
 
-    // Convertir en data URL
-    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    canvas.width = w;
+    canvas.height = h;
+
+    context.drawImage(video, 0, 0, w, h);
+
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    console.log(`📷 Image capturée: ${w}x${h} (${Math.round(imageDataUrl.length / 1024)} Ko)`);
     return imageDataUrl;
   };
 
@@ -472,7 +479,7 @@ const AttendanceFaceCapture = ({
       // Capturer l'image
       const imageDataUrl = captureImage();
       if (!imageDataUrl) {
-        throw new Error('Impossible de capturer l\'image');
+        throw new Error('Le flux vidéo n\'est pas encore prêt. Attendez quelques secondes que la caméra charge complètement, puis réessayez.');
       }
 
       setCapturedImage(imageDataUrl);
