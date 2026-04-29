@@ -504,13 +504,14 @@ const AttendanceFaceCapture = ({
       console.log('📊 Résultat de la reconnaissance:', result);
       setRecognitionResult(result);
 
+      let resolvedName = null;
       try {
         const rawName = result?.recognizedPerson?.name;
         const isMongoId = typeof rawName === 'string' && /^[0-9a-fA-F]{24}$/.test(rawName.trim());
         if (isMongoId) {
           const key = rawName.trim().toLowerCase();
-          const resolved = employeeNameById.get(key) || null;
-          setResolvedRecognizedName(resolved);
+          resolvedName = employeeNameById.get(key) || null;
+          setResolvedRecognizedName(resolvedName);
         } else {
           setResolvedRecognizedName(null);
         }
@@ -530,7 +531,7 @@ const AttendanceFaceCapture = ({
           if (onRecognitionSuccess) {
             onRecognitionSuccess({
               personName: detection.name,
-              personDisplayName: resolvedRecognizedName || null,
+              personDisplayName: resolvedName,
               confidence: detection.confidence_level,
               similarity: detection.similarity,
               qualityScore: detection.quality_score,
