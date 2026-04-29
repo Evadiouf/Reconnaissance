@@ -441,10 +441,16 @@ const AttendanceFaceCapture = ({
     if (!videoRef.current || !canvasRef.current) return null;
 
     const video = videoRef.current;
+
+    // Vérifier que la vidéo a bien des frames décodées
+    if (video.readyState < 2) {
+      console.warn('⚠️ Vidéo pas encore prête (readyState:', video.readyState, ')');
+      return null;
+    }
+
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
 
-    // Dimensions réelles de la vidéo (HLS ou webcam)
     const w = video.videoWidth || video.clientWidth || 640;
     const h = video.videoHeight || video.clientHeight || 480;
 
@@ -456,11 +462,15 @@ const AttendanceFaceCapture = ({
     canvas.width = w;
     canvas.height = h;
 
-    context.drawImage(video, 0, 0, w, h);
-
-    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    console.log(`📷 Image capturée: ${w}x${h} (${Math.round(imageDataUrl.length / 1024)} Ko)`);
-    return imageDataUrl;
+    try {
+      context.drawImage(video, 0, 0, w, h);
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      console.log(`📷 Image capturée: ${w}x${h} (${Math.round(imageDataUrl.length / 1024)} Ko)`);
+      return imageDataUrl;
+    } catch (err) {
+      console.error('❌ Erreur lors de la capture canvas:', err.message);
+      return null;
+    }
   };
 
   // Effectuer la reconnaissance faciale
@@ -696,20 +706,28 @@ const AttendanceFaceCapture = ({
           </div>
         )}
         
-        {/* Image capturée en overlay */}
-        {capturedImage && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-            <img 
-              src={capturedImage} 
-              alt="Image capturée" 
-              className="max-w-full max-h-full"
-            />
+        {/* Indicateur de capture en cours */}
+        {isCapturing && (
+          <div className="absolute top-2 right-2 bg-yellow-400 text-black text-xs px-2 py-1 rounded font-bold animate-pulse">
+            📸 Capture...
           </div>
         )}
         
         {/* Canvas caché pour la capture */}
         <canvas ref={canvasRef} className="hidden" />
       </div>
+
+      {/* Miniature de l'image capturée (diagnostic) */}
+      {capturedImage && (
+        <div className="flex items-start gap-3 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+          <img src={capturedImage} alt="Capture envoyée à l'API" className="w-20 h-16 object-cover rounded border border-gray-300 flex-shrink-0" />
+          <div className="text-xs text-gray-500">
+            <p className="font-medium text-gray-700 mb-0.5">Image envoyée à l'API</p>
+            <p>Si vous voyez votre visage clairement ici, repositionnez-vous face à la caméra et réessayez.</p>
+            <p className="mt-0.5 text-gray-400">Si l'image est noire ou vide, le flux vidéo n'est pas encore stable.</p>
+          </div>
+        </div>
+      )}
 
       {/* Messages d'erreur */}
       {error && (
