@@ -35,40 +35,47 @@ export default function KiosqueSettings() {
   ]);
   const [teamOverrides, setTeamOverrides] = useState([]);
 
+  const applyKioskAttendanceToForm = useCallback((ka) => {
+    if (!ka) {
+      setEnabled(false);
+      setDefaultSlots([
+        { start: '07:30', end: '09:30', action: 'clock_in' },
+        { start: '17:00', end: '19:00', action: 'clock_out' },
+      ]);
+      setTeamOverrides([]);
+      return;
+    }
+
+    setEnabled(!!ka.enabled);
+    setDefaultSlots(Array.isArray(ka.defaultSlots) ? ka.defaultSlots.map((s) => ({ ...s })) : []);
+    setTeamOverrides(
+      Array.isArray(ka.teamOverrides)
+        ? ka.teamOverrides.map((t) => ({
+            departmentKey: t.departmentKey || '',
+            label: t.label || '',
+            enabled: !!t.enabled,
+            slots:
+              Array.isArray(t.slots) && t.slots.length > 0
+                ? t.slots.map((s) => ({ ...s }))
+                : [],
+          }))
+        : [],
+    );
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const company = await companiesService.getMyCompany();
-      const ka = company?.kioskAttendance;
-      if (ka) {
-        setEnabled(!!ka.enabled);
-        if (Array.isArray(ka.defaultSlots) && ka.defaultSlots.length > 0) {
-          setDefaultSlots(ka.defaultSlots.map((s) => ({ ...s })));
-        }
-        if (Array.isArray(ka.teamOverrides) && ka.teamOverrides.length > 0) {
-          setTeamOverrides(
-            ka.teamOverrides.map((t) => ({
-              departmentKey: t.departmentKey || '',
-              label: t.label || '',
-              enabled: !!t.enabled,
-              slots:
-                Array.isArray(t.slots) && t.slots.length > 0
-                  ? t.slots.map((s) => ({ ...s }))
-                  : [emptySlot()],
-            })),
-          );
-        } else {
-          setTeamOverrides([]);
-        }
-      }
+      applyKioskAttendanceToForm(company?.kioskAttendance || null);
     } catch (e) {
       console.error(e);
       setError('Impossible de charger la configuration.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyKioskAttendanceToForm]);
 
   useEffect(() => {
     load();
@@ -86,13 +93,13 @@ export default function KiosqueSettings() {
         slots: (t.slots || []).filter((s) => s.start && s.end && s.action),
       }));
 
-      await companiesService.updateKioskAttendance({
+      const updated = await companiesService.updateKioskAttendance({
         enabled,
         defaultSlots: defaultSlots.filter((s) => s.start && s.end && s.action),
         teamOverrides: normalizedTeams.filter((t) => t.departmentKey),
       });
+      applyKioskAttendanceToForm(updated?.company?.kioskAttendance || updated?.kioskAttendance || null);
       setMessage('Configuration enregistrée. Le poste kiosque appliquera les changements sous ~1 minute.');
-      await load();
     } catch (e) {
       const msg =
         e.response?.data?.message ||
@@ -350,7 +357,7 @@ export default function KiosqueSettings() {
                 onClick={save}
                 className="px-6 py-3 bg-[#0389A6] text-white rounded-xl font-medium hover:bg-[#027A94] disabled:opacity-50"
               >
-                {saving ? 'Enregistrement…' : 'Enregistrer la configuration'}
+                {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
               </button>
             </div>
           )}
