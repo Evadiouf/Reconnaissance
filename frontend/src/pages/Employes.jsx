@@ -67,6 +67,7 @@ function Employes() {
   const [availableSchedules, setAvailableSchedules] = useState([]);
   const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
   const [scheduleMenuOpen, setScheduleMenuOpen] = useState(false);
+  const [editScheduleMenuOpen, setEditScheduleMenuOpen] = useState(false);
 
   const formatScheduleLabel = (schedule) => {
     const name = schedule?.name || '';
@@ -91,6 +92,14 @@ function Employes() {
     const fullName = `${firstName} ${lastName}`.trim() || user.email?.split('@')[0] || 'Employé';
     const initials = `${firstName.charAt(0).toUpperCase()}${lastName.charAt(0).toUpperCase()}` || '??';
     
+    const wid = user.workingScheduleId;
+    const workingScheduleId =
+      wid == null || wid === ''
+        ? ''
+        : typeof wid === 'object' && wid?.toString
+          ? String(wid.toString())
+          : String(wid);
+
     return {
       id: user._id || user.id || Date.now().toString(),
       nomComplet: fullName,
@@ -104,13 +113,15 @@ function Employes() {
       position: user.position || user.poste || 'Non spécifié',
       lieuDeTravail: user.location || user.lieuDeTravail || 'Non spécifié',
       location: user.location || user.lieuDeTravail || 'Non spécifié',
+      workingScheduleId,
       isActive: user.isActive !== false,
       status: user.isActive !== false ? 'Actif' : 'Inactif',
       statusBg: user.isActive !== false ? '#E6F7F9' : '#FEE2E2',
       statusColor: user.isActive !== false ? '#01A04E' : '#DC2626',
       attendance: '0%',
       initials: initials,
-      roles: user.roles || []
+      roles: user.roles || [],
+      photo: user.photo || undefined,
     };
   };
 
@@ -173,9 +184,37 @@ function Employes() {
             const apiUsers = await companiesService.getCompanyEmployees();
             const apiEmployees = Array.isArray(apiUsers) ? apiUsers : [];
 
-            const formattedEmployees = apiEmployees.map(formatUserToEmployee);
-            setEmployees(formattedEmployees);
             const scopedKey = getEmployeesStorageKey({ companyId, userEmail: user.email });
+            const photoById = new Map();
+            const photoByEmail = new Map();
+            try {
+              const prevRaw = scopedKey ? localStorage.getItem(scopedKey) : null;
+              if (prevRaw) {
+                const prevList = JSON.parse(prevRaw);
+                if (Array.isArray(prevList)) {
+                  for (const e of prevList) {
+                    const pid = e?.id != null ? String(e.id) : e?._id != null ? String(e._id) : '';
+                    if (pid && e?.photo?.url) photoById.set(pid, e.photo);
+                    const em = (e?.email || '').toString().trim().toLowerCase();
+                    if (em && e?.photo?.url) photoByEmail.set(em, e.photo);
+                  }
+                }
+              }
+            } catch (_) {}
+
+            const formattedEmployees = apiEmployees.map((u) => {
+              const emp = formatUserToEmployee(u);
+              if (!emp.photo?.url) {
+                const byId = photoById.get(String(emp.id));
+                if (byId) emp.photo = byId;
+                else {
+                  const em = (emp.email || '').toString().trim().toLowerCase();
+                  if (em && photoByEmail.has(em)) emp.photo = photoByEmail.get(em);
+                }
+              }
+              return emp;
+            });
+            setEmployees(formattedEmployees);
             setEmployeesStorageKey(scopedKey);
             syncLocalStorage(formattedEmployees, scopedKey);
             console.log('✅ Employés chargés depuis l\'API:', formattedEmployees.length);
@@ -592,6 +631,7 @@ function Employes() {
       department: formData.departement || 'Non spécifié',
       position: formData.poste || 'Non spécifié',
       location: formData.lieuDeTravail || 'Non spécifié',
+      workingScheduleId: formData.workingScheduleId ? String(formData.workingScheduleId) : '',
       status: formData.isActive ? 'Actif' : 'Inactif',
       attendance: '0%',
       statusColor: formData.isActive ? '#01A04E' : '#5A6565',
@@ -753,8 +793,10 @@ function Employes() {
       departement: '',
       poste: '',
       lieuDeTravail: '',
-      isActive: true
+      isActive: true,
+      workingScheduleId: '',
     });
+    setScheduleMenuOpen(false);
 
     // Réinitialiser les données de photo
     setProfileImage(null);
@@ -777,6 +819,7 @@ function Employes() {
   // Modifier un employé
   const handleEditEmployee = (employee) => {
     setSelectedEmployee(employee);
+    setEditScheduleMenuOpen(false);
     setFormData({
       nomComplet: employee.name || '',
       email: employee.email || '',
@@ -784,7 +827,8 @@ function Employes() {
       departement: employee.department || '',
       poste: employee.position || '',
       lieuDeTravail: employee.location || '',
-      isActive: employee.status === 'Actif'
+      isActive: employee.status === 'Actif',
+      workingScheduleId: employee.workingScheduleId ? String(employee.workingScheduleId) : '',
     });
     
     // Initialiser les états de la photo avec les données existantes
@@ -941,6 +985,7 @@ function Employes() {
           department: formData.departement || undefined,
           position: formData.poste || undefined,
           location: formData.lieuDeTravail || undefined,
+          workingScheduleId: formData.workingScheduleId ? formData.workingScheduleId : null,
         };
         
         await usersService.update(employeeId, updateData);
@@ -966,6 +1011,7 @@ function Employes() {
               status: formData.isActive ? 'Actif' : 'Inactif',
               statusColor: formData.isActive ? '#01A04E' : '#5A6565',
               statusBg: formData.isActive ? 'rgba(1, 160, 78, 0.1)' : 'rgba(90, 101, 101, 0.1)',
+              workingScheduleId: formData.workingScheduleId || '',
               // Mettre à jour la photo si une nouvelle a été uploadée
               photo: uploadedPhotoData ? {
                 id: uploadedPhotoData.id,
@@ -1000,8 +1046,10 @@ function Employes() {
       departement: '',
       poste: '',
       lieuDeTravail: '',
-      isActive: true
+      isActive: true,
+      workingScheduleId: '',
     });
+    setEditScheduleMenuOpen(false);
     
     console.log('✏️ Employé modifié avec succès');
     alert('Employé modifié avec succès !');
@@ -2040,8 +2088,9 @@ function Employes() {
                     poste: '',
                     lieuDeTravail: '',
                     isActive: true,
-                    workingScheduleId: ''
+                    workingScheduleId: '',
                   });
+                  setEditScheduleMenuOpen(false);
                 }}
                 className="p-1.5 hover:bg-[#ECEFEF] rounded-full transition-colors"
               >
@@ -2244,6 +2293,76 @@ function Employes() {
               </div>
 
               <div>
+                <label className="block font-instrument text-sm font-semibold text-[#002222] mb-1">
+                  Horaire de travail
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditScheduleMenuOpen((v) => !v);
+                    }}
+                    className="w-full bg-[#ECEFEF] border border-[#D4DCDC] rounded-xl px-4 py-2.5 font-instrument text-sm text-[#002222] focus:outline-none focus:border-[#0389A6] flex items-center justify-between"
+                  >
+                    <span>
+                      {formData.workingScheduleId
+                        ? formatScheduleLabel(
+                            availableSchedules.find(
+                              (s) =>
+                                String(s?._id || s?.id || '') === String(formData.workingScheduleId),
+                            ),
+                          )
+                        : isLoadingSchedules
+                          ? 'Chargement des horaires...'
+                          : 'Aucun horaire (optionnel)'}
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M6 9L12 15L18 9" stroke="#5A6565" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+
+                  {editScheduleMenuOpen && (
+                    <div className="absolute top-full mt-2 left-0 right-0 bg-white border border-[#D4DCDC] rounded-xl shadow-lg z-10 max-h-56 overflow-auto">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFormData((prev) => ({ ...prev, workingScheduleId: '' }));
+                          setEditScheduleMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 font-instrument text-sm text-[#5A6565] hover:bg-[#ECEFEF] transition-colors border-b border-[#ECEFEF]"
+                      >
+                        Aucun horaire
+                      </button>
+                      {availableSchedules.map((schedule) => (
+                        <button
+                          key={schedule?._id || schedule?.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFormData((prev) => ({
+                              ...prev,
+                              workingScheduleId: (schedule?._id || schedule?.id || '').toString(),
+                            }));
+                            setEditScheduleMenuOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 font-instrument text-sm text-[#002222] hover:bg-[#ECEFEF] transition-colors"
+                        >
+                          {formatScheduleLabel(schedule)}
+                        </button>
+                      ))}
+                      {availableSchedules.length === 0 && !isLoadingSchedules && (
+                        <div className="px-4 py-2.5 font-instrument text-sm text-[#5A6565]">
+                          Aucun horaire configuré (page Horaires)
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -2269,6 +2388,7 @@ function Employes() {
                     
                     setIsEditModalOpen(false);
                     setSelectedEmployee(null);
+                    setEditScheduleMenuOpen(false);
                     setFormData({
                       nomComplet: '',
                       email: '',
@@ -2276,7 +2396,8 @@ function Employes() {
                       departement: '',
                       poste: '',
                       lieuDeTravail: '',
-                      isActive: true
+                      isActive: true,
+                      workingScheduleId: '',
                     });
                   }}
                   className="px-4 py-2.5 border border-[#D4DCDC] rounded-xl font-instrument text-sm text-[#002222] hover:bg-[#ECEFEF] transition-colors"
