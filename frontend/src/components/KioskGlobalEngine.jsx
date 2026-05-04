@@ -34,6 +34,8 @@ export default function KioskGlobalEngine() {
   const hlsRef = useRef(null);
   const captureTimerRef = useRef(null);
   const recentlyRecognized = useRef(new Map());
+  const noFaceStreakRef = useRef(0);
+  const lastNoFaceHintAtRef = useRef(0);
   const kioskAttendanceRef = useRef(null);
   const employeeDeptByIdRef = useRef(new Map());
   const audioRef = useRef({ success: null, failure: null, checkout: null });
@@ -312,15 +314,30 @@ export default function KioskGlobalEngine() {
 
       const person = result?.recognizedPerson;
       if (!person || !faceRecognitionService.isValidDetection(person, CONFIDENCE_THRESHOLD)) {
+        noFaceStreakRef.current += 1;
+        const now = Date.now();
+        if (
+          noFaceStreakRef.current >= 4 &&
+          now - lastNoFaceHintAtRef.current > 20000
+        ) {
+          lastNoFaceHintAtRef.current = now;
+          noFaceStreakRef.current = 0;
+          showFeedback(
+            'Reconnaissance',
+            'warn',
+            'Aucun visage identifie avec assez de confiance. Verifiez la lumiere, la distance, et que la photo employe est bien enregistree sur le serveur.',
+          );
+        }
         return;
       }
+
+      noFaceStreakRef.current = 0;
 
       const employeeId = person.name;
       if (!employeeId) return;
 
       const lastTime = recentlyRecognized.current.get(employeeId);
       if (lastTime && Date.now() - lastTime < COOLDOWN_PER_PERSON_MS) return;
-      recentlyRecognized.current.set(employeeId, Date.now());
 
       try {
         await companiesService.attachEmployeeToMyCompany(employeeId);
@@ -414,14 +431,12 @@ export default function KioskGlobalEngine() {
         }
       }
 
+      recentlyRecognized.current.set(employeeId, Date.now());
       showFeedback(displayName, pointageType);
       addRecentEvent(displayName, pointageType);
       await playSound(pointageType === 'in' ? 'success' : 'checkout');
     } catch (err) {
-      if (!err?.message?.includes('Aucun visage') && !err?.message?.includes('confiance')) {
-        console.warn('Reconnaissance:', err?.message);
-        await playSound('failure');
-      }
+      console.warn('Reconnaissance:', err?.message || err);
     } finally {
       setIsRecognizing(false);
     }
@@ -460,6 +475,14 @@ export default function KioskGlobalEngine() {
     () => isAnyKioskSlotActiveNow(kioskAttendance, currentTime),
     [kioskAttendance, currentTime],
   );
+
+  /** Action du premier créneau « défaut entreprise » qui contient l'heure actuelle (affichage seulement). */
+  const defaultCompanyActionNow = useMemo(() => {
+    if (!kioskAttendance?.enabled) return null;
+    const def = kioskAttendance.defaultSlots;
+    if (!Array.isArray(def) || def.length === 0) return null;
+    return pickKioskActionForNow(def, currentTime);
+  }, [kioskAttendance, currentTime]);
 
   if (!isLoggedIn) return null;
 
@@ -526,6 +549,36 @@ export default function KioskGlobalEngine() {
             <div className="mx-10 mb-2 px-4 py-3 rounded-xl bg-amber-900/90 border border-amber-600/50 text-amber-100 text-sm text-center leading-snug">
               <strong className="text-amber-50">Hors plage horaire.</strong>{' '}
               L'heure actuelle du PC est <strong>{formattedTime}</strong> - aucun pointage automatique n'est enregistre en dehors des creneaux.
+            </div>
+          )}
+
+          {kioskActive && strictSchedule && inAnyCompanySlot && (
+            <div className="mx-10 mb-2 px-4 py-2 rounded-xl bg-emerald-900/50 border border-emerald-600/40 text-emerald-100 text-xs text-center leading-snug">
+              {defaultCompanyActionNow === 'clock_in' && (
+                <>
+                  Créneau <strong>entreprise (défaut)</strong> à cette heure : <strong>Entrée</strong>. Les équipes avec
+                  plages propres utilisent leurs créneaux à la place.
+                </>
+              )}
+              {defaultCompanyActionNow === 'clock_out' && (
+                <>
+                  Créneau <strong>entreprise (défaut)</strong> à cette heure : <strong>Sortie</strong>. Les équipes avec
+                  plages propres utilisent leurs créneaux à la place.
+                </>
+              )}
+              {!defaultCompanyActionNow && (
+                <>
+                  Plage active (équipe ou entreprise). Le kiosque enregistre <strong>Entrée</strong> ou{' '}
+                  <strong>Sortie</strong> selon le <strong>créneau</strong> qui correspond à l&apos;heure et au{' '}
+                  <strong>département</strong> de la personne reconnue.
+                </>
+              )}
+            </div>
+          )}
+
+          {kioskActive && videoConnected && !companyId && (
+            <div className="mx-10 mb-2 px-4 py-2 rounded-xl bg-yellow-900/60 border border-yellow-600/40 text-yellow-100 text-xs text-center">
+              Chargement de l&apos;entreprise… Le pointage démarre dès que l&apos;identifiant société est disponible.
             </div>
           )}
 
@@ -684,6 +737,18 @@ export default function KioskGlobalEngine() {
             </button>
             {renderStopButton('flex-1 px-3 py-2 bg-red-800 text-red-200 rounded-lg text-xs hover:bg-red-700')}
           </div>
+          {feedback && (
+            <div className="px-2 py-2 border-t border-[#004444] bg-[#003333] text-[11px] text-amber-100 leading-snug">
+              <span className="font-semibold text-white">{feedback.name}</span>
+              {' — '}
+              {feedback.message ||
+                (feedback.type === 'in'
+                  ? 'Entrée enregistrée'
+                  : feedback.type === 'out'
+                    ? 'Sortie enregistrée'
+                    : 'Pointage refusé')}
+            </div>
+          )}
         </div>
       )}
 
