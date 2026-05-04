@@ -299,7 +299,7 @@ export default function KioskGlobalEngine() {
   }, []);
 
   const runRecognition = useCallback(async () => {
-    if (!isLoggedIn || isRecognizing || !videoConnected || !companyId) return;
+    if (!isLoggedIn || !kioskActive || isRecognizing || !videoConnected || !companyId) return;
 
     const imageData = captureFrame();
     if (!imageData) return;
@@ -311,7 +311,9 @@ export default function KioskGlobalEngine() {
       });
 
       const person = result?.recognizedPerson;
-      if (!person || !faceRecognitionService.isValidDetection(person, CONFIDENCE_THRESHOLD)) return;
+      if (!person || !faceRecognitionService.isValidDetection(person, CONFIDENCE_THRESHOLD)) {
+        return;
+      }
 
       const employeeId = person.name;
       if (!employeeId) return;
@@ -423,7 +425,17 @@ export default function KioskGlobalEngine() {
     } finally {
       setIsRecognizing(false);
     }
-  }, [isLoggedIn, isRecognizing, videoConnected, companyId, captureFrame, showFeedback, addRecentEvent, playSound]);
+  }, [
+    isLoggedIn,
+    kioskActive,
+    isRecognizing,
+    videoConnected,
+    companyId,
+    captureFrame,
+    showFeedback,
+    addRecentEvent,
+    playSound,
+  ]);
 
   useEffect(() => {
     if (!kioskActive || !videoConnected) return undefined;
