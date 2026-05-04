@@ -36,6 +36,7 @@ export default function KioskGlobalEngine() {
   const recentlyRecognized = useRef(new Map());
   const kioskAttendanceRef = useRef(null);
   const employeeDeptByIdRef = useRef(new Map());
+  const audioRef = useRef({ success: null, failure: null, checkout: null });
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [companyId, setCompanyId] = useState(null);
@@ -48,10 +49,82 @@ export default function KioskGlobalEngine() {
   const [recentEvents, setRecentEvents] = useState([]);
   const [apiStatus, setApiStatus] = useState(null);
   const [kioskAttendance, setKioskAttendance] = useState(null);
+  const [isSoundMuted] = useState(() => {
+    try {
+      return localStorage.getItem('attendanceSoundMuted') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
+
+  const unlockAudio = useCallback(async () => {
+    if (isAudioUnlocked) return;
+    try {
+      const a = audioRef.current.success;
+      if (!a) {
+        setIsAudioUnlocked(true);
+        return;
+      }
+      const prevMuted = a.muted;
+      const prevVolume = a.volume;
+      a.muted = true;
+      a.volume = 0;
+      await a.play();
+      a.pause();
+      a.currentTime = 0;
+      a.muted = prevMuted;
+      a.volume = prevVolume;
+      setIsAudioUnlocked(true);
+    } catch (_) {}
+  }, [isAudioUnlocked]);
 
   useEffect(() => {
     kioskAttendanceRef.current = kioskAttendance;
   }, [kioskAttendance]);
+
+  useEffect(() => {
+    const init = () => {
+      try {
+        audioRef.current.success = new Audio('/audio/success.mp3');
+        audioRef.current.failure = new Audio('/audio/failure.mp3');
+        audioRef.current.checkout = new Audio('/audio/checkout.mp3');
+        Object.values(audioRef.current).forEach((a) => {
+          if (!a) return;
+          a.preload = 'auto';
+          a.muted = isSoundMuted;
+        });
+      } catch (_) {}
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(init);
+    } else {
+      setTimeout(init, 0);
+    }
+  }, [isSoundMuted]);
+
+  useEffect(() => {
+    if (isAudioUnlocked) return undefined;
+    const handler = () => {
+      unlockAudio();
+    };
+    document.addEventListener('click', handler, { once: true, capture: true });
+    return () => document.removeEventListener('click', handler, { capture: true });
+  }, [isAudioUnlocked, unlockAudio]);
+
+  const playSound = useCallback(
+    async (key) => {
+      if (isSoundMuted || !isAudioUnlocked) return;
+      const a = audioRef.current[key];
+      if (!a) return;
+      try {
+        a.currentTime = 0;
+        await a.play();
+      } catch (_) {}
+    },
+    [isSoundMuted, isAudioUnlocked],
+  );
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -320,14 +393,16 @@ export default function KioskGlobalEngine() {
 
       showFeedback(displayName, pointageType);
       addRecentEvent(displayName, pointageType);
+      await playSound(pointageType === 'in' ? 'success' : 'checkout');
     } catch (err) {
       if (!err?.message?.includes('Aucun visage') && !err?.message?.includes('confiance')) {
         console.warn('Reconnaissance:', err?.message);
+        await playSound('failure');
       }
     } finally {
       setIsRecognizing(false);
     }
-  }, [isLoggedIn, isRecognizing, videoConnected, companyId, captureFrame, showFeedback, addRecentEvent]);
+  }, [isLoggedIn, isRecognizing, videoConnected, companyId, captureFrame, showFeedback, addRecentEvent, playSound]);
 
   useEffect(() => {
     if (!kioskActive || !videoConnected) return undefined;
@@ -357,7 +432,10 @@ export default function KioskGlobalEngine() {
 
   const renderStartButton = (className) => (
     <button
-      onClick={startKiosk}
+      onClick={() => {
+        unlockAudio();
+        startKiosk();
+      }}
       className={className}
     >
       ▶ Demarrer le kiosque
