@@ -283,8 +283,8 @@ export default function KioskGlobalEngine() {
     }
   }, []);
 
-  const showFeedback = useCallback((name, type) => {
-    setFeedback({ name, type });
+  const showFeedback = useCallback((name, type, message = null) => {
+    setFeedback({ name, type, message });
     setTimeout(() => setFeedback(null), FEEDBACK_DURATION_MS);
   }, []);
 
@@ -334,7 +334,11 @@ export default function KioskGlobalEngine() {
       let displayName = person.displayName || employeeId;
 
       if (strict && slots?.length) {
-        if (!scheduledAction) return;
+        if (!scheduledAction) {
+          showFeedback(displayName, 'warn', 'Hors creneau actif pour ce profil');
+          await playSound('failure');
+          return;
+        }
         if (scheduledAction === 'clock_in') {
           try {
             const res = await attendanceService.clockIn({
@@ -346,7 +350,13 @@ export default function KioskGlobalEngine() {
             displayName = res?.employeeName || displayName;
             pointageType = 'in';
           } catch (clockInErr) {
-            if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) return;
+            if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
+              showFeedback(displayName, 'warn', "Entree deja ouverte ou employee non autorise");
+              await playSound('failure');
+              return;
+            }
+            showFeedback(displayName, 'warn', 'Echec du pointage entree');
+            await playSound('failure');
             return;
           }
         } else {
@@ -358,7 +368,14 @@ export default function KioskGlobalEngine() {
             });
             displayName = res?.employeeName || displayName;
             pointageType = 'out';
-          } catch (_) {
+          } catch (clockOutErr) {
+            if (clockOutErr?.response?.status === 409 || clockOutErr?.response?.status === 400) {
+              showFeedback(displayName, 'warn', 'Aucune entree ouverte pour effectuer une sortie');
+              await playSound('failure');
+              return;
+            }
+            showFeedback(displayName, 'warn', 'Echec du pointage sortie');
+            await playSound('failure');
             return;
           }
         }
@@ -383,9 +400,13 @@ export default function KioskGlobalEngine() {
               displayName = res?.employeeName || displayName;
               pointageType = 'out';
             } catch (_) {
+              showFeedback(displayName, 'warn', 'Impossible de faire la sortie automatique');
+              await playSound('failure');
               return;
             }
           } else {
+            showFeedback(displayName, 'warn', 'Echec du pointage automatique');
+            await playSound('failure');
             return;
           }
         }
@@ -539,12 +560,27 @@ export default function KioskGlobalEngine() {
 
                     {feedback && (
                       <div className={`absolute inset-0 flex flex-col items-center justify-center ${
-                        feedback.type === 'in' ? 'bg-green-900 bg-opacity-80' : 'bg-orange-900 bg-opacity-80'
+                        feedback.type === 'in'
+                          ? 'bg-green-900 bg-opacity-80'
+                          : feedback.type === 'out'
+                            ? 'bg-orange-900 bg-opacity-80'
+                            : 'bg-amber-900 bg-opacity-80'
                       }`}>
                         <p className="text-white text-4xl font-bold mb-2">{feedback.name}</p>
-                        <p className={`text-2xl font-semibold ${feedback.type === 'in' ? 'text-green-300' : 'text-orange-300'}`}>
-                          {feedback.type === 'in' ? 'Entree enregistree' : 'Sortie enregistree'}
+                        <p className={`text-2xl font-semibold ${
+                          feedback.type === 'in'
+                            ? 'text-green-300'
+                            : feedback.type === 'out'
+                              ? 'text-orange-300'
+                              : 'text-amber-200'
+                        }`}>
+                          {feedback.type === 'in'
+                            ? 'Entree enregistree'
+                            : feedback.type === 'out'
+                              ? 'Sortie enregistree'
+                              : 'Pointage refuse'}
                         </p>
+                        {feedback.message && <p className="text-amber-100 mt-2 text-sm">{feedback.message}</p>}
                       </div>
                     )}
                   </>
