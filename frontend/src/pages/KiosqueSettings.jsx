@@ -13,6 +13,16 @@ const emptyTeam = () => ({
   slots: [emptySlot()],
 });
 
+/** Champs formulaire : contraste fort (texte saisi bien visible sur fond clair) */
+const inputClass =
+  'min-h-[42px] border border-gray-400 rounded-lg bg-white px-3 py-2 ' +
+  'text-base font-semibold text-gray-900 caret-[#0389A6] ' +
+  'placeholder:text-gray-600 placeholder:font-normal ' +
+  'shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0389A6]/45 focus:border-[#0389A6] ' +
+  '[color-scheme:light]';
+
+const selectClass = `${inputClass} cursor-pointer pr-8`;
+
 export default function KiosqueSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -109,29 +119,29 @@ export default function KiosqueSettings() {
 
         <main className="flex-1 p-8 max-w-4xl">
           {loading ? (
-            <p className="text-gray-600">Chargement…</p>
+            <p className="text-gray-900 font-medium">Chargement…</p>
           ) : (
-            <div className="space-y-8 bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-              <p className="text-sm text-gray-600">
+            <div className="space-y-8 bg-white rounded-2xl border border-gray-200 p-8 shadow-sm [color-scheme:light]">
+              <p className="text-sm text-gray-800 leading-relaxed">
                 Activez le <strong>pointage automatique par plages horaires</strong> pour la page{' '}
                 <strong>Kiosque</strong>. Tant que l’option est désactivée, le comportement du kiosque reste
                 inchangé (démarrage manuel, entrée puis sortie comme avant). La clé <strong>département</strong>{' '}
                 d’une équipe doit correspondre au champ « Département » des employés (insensible à la casse).
               </p>
 
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex items-center gap-3 cursor-pointer text-gray-900">
                 <input
                   type="checkbox"
                   checked={enabled}
                   onChange={(e) => setEnabled(e.target.checked)}
-                  className="w-5 h-5 rounded border-gray-300 text-[#0389A6] focus:ring-[#0389A6]"
+                  className="w-5 h-5 shrink-0 rounded border-2 border-gray-500 bg-white text-[#0389A6] accent-[#0389A6] focus:ring-2 focus:ring-[#0389A6]"
                 />
-                <span className="font-medium text-[#002222]">Activer les plages horaires sur le kiosque</span>
+                <span className="font-semibold text-[#002222]">Activer les plages horaires sur le kiosque</span>
               </label>
 
               <section>
                 <h2 className="text-lg font-semibold text-[#002222] mb-3">Créneaux par défaut (toute l’entreprise)</h2>
-                <p className="text-xs text-gray-500 mb-3">Premier créneau contenant l’heure actuelle = règle appliquée.</p>
+                <p className="text-sm text-gray-700 mb-3">Premier créneau contenant l’heure actuelle = règle appliquée.</p>
                 <div className="space-y-2">
                   {defaultSlots.map((row, i) => (
                     <div key={i} className="flex flex-wrap items-center gap-2">
@@ -143,9 +153,9 @@ export default function KiosqueSettings() {
                           next[i] = { ...next[i], start: e.target.value };
                           setDefaultSlots(next);
                         }}
-                        className="border rounded-lg px-2 py-1.5 text-sm"
+                        className={inputClass}
                       />
-                      <span className="text-gray-400">→</span>
+                      <span className="text-gray-700 font-medium">→</span>
                       <input
                         type="time"
                         value={row.end}
@@ -154,7 +164,7 @@ export default function KiosqueSettings() {
                           next[i] = { ...next[i], end: e.target.value };
                           setDefaultSlots(next);
                         }}
-                        className="border rounded-lg px-2 py-1.5 text-sm"
+                        className={inputClass}
                       />
                       <select
                         value={row.action}
@@ -163,7 +173,7 @@ export default function KiosqueSettings() {
                           next[i] = { ...next[i], action: e.target.value };
                           setDefaultSlots(next);
                         }}
-                        className="border rounded-lg px-2 py-1.5 text-sm"
+                        className={selectClass}
                       >
                         <option value="clock_in">Entrée</option>
                         <option value="clock_out">Sortie</option>
@@ -190,9 +200,13 @@ export default function KiosqueSettings() {
 
               <section>
                 <h2 className="text-lg font-semibold text-[#002222] mb-3">Équipes (optionnel)</h2>
-                <p className="text-xs text-gray-500 mb-3">
-                  Si un employé a le même département (ex. <code>marketing</code>) qu’une ligne ci-dessous avec
-                  « activé » et des créneaux, ce sont <strong>ces</strong> créneaux qui s’appliquent à la place du défaut.
+                <p className="text-sm text-gray-700 mb-3">
+                  Si un employé a le même département (ex.{' '}
+                  <code className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-900 font-mono text-sm border border-gray-200">
+                    marketing
+                  </code>
+                  ) qu’une ligne ci-dessous avec « activé » et des créneaux, ce sont{' '}
+                  <strong className="text-gray-900">ces</strong> créneaux qui s’appliquent à la place du défaut.
                 </p>
                 <div className="space-y-6">
                   {teamOverrides.map((team, ti) => (
@@ -206,7 +220,7 @@ export default function KiosqueSettings() {
                             next[ti] = { ...next[ti], departmentKey: e.target.value };
                             setTeamOverrides(next);
                           }}
-                          className="flex-1 min-w-[180px] border rounded-lg px-3 py-2 text-sm"
+                          className={`flex-1 min-w-[180px] ${inputClass}`}
                         />
                         <input
                           placeholder="Libellé (optionnel)"
@@ -216,9 +230,9 @@ export default function KiosqueSettings() {
                             next[ti] = { ...next[ti], label: e.target.value };
                             setTeamOverrides(next);
                           }}
-                          className="flex-1 min-w-[120px] border rounded-lg px-3 py-2 text-sm"
+                          className={`flex-1 min-w-[120px] ${inputClass}`}
                         />
-                        <label className="flex items-center gap-2 text-sm">
+                        <label className="flex items-center gap-2 text-sm font-medium text-gray-900 shrink-0">
                           <input
                             type="checkbox"
                             checked={team.enabled}
@@ -227,6 +241,7 @@ export default function KiosqueSettings() {
                               next[ti] = { ...next[ti], enabled: e.target.checked };
                               setTeamOverrides(next);
                             }}
+                            className="h-4 w-4 rounded border-2 border-gray-500 bg-white accent-[#0389A6]"
                           />
                           Activé
                         </label>
@@ -250,9 +265,9 @@ export default function KiosqueSettings() {
                               next[ti] = { ...next[ti], slots };
                               setTeamOverrides(next);
                             }}
-                            className="border rounded-lg px-2 py-1.5 text-sm"
+                            className={inputClass}
                           />
-                          <span className="text-gray-400">→</span>
+                          <span className="text-gray-700 font-medium">→</span>
                           <input
                             type="time"
                             value={row.end}
@@ -263,7 +278,7 @@ export default function KiosqueSettings() {
                               next[ti] = { ...next[ti], slots };
                               setTeamOverrides(next);
                             }}
-                            className="border rounded-lg px-2 py-1.5 text-sm"
+                            className={inputClass}
                           />
                           <select
                             value={row.action}
@@ -274,7 +289,7 @@ export default function KiosqueSettings() {
                               next[ti] = { ...next[ti], slots };
                               setTeamOverrides(next);
                             }}
-                            className="border rounded-lg px-2 py-1.5 text-sm"
+                            className={selectClass}
                           >
                             <option value="clock_in">Entrée</option>
                             <option value="clock_out">Sortie</option>
