@@ -2,9 +2,11 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { KioskSessionProvider } from './contexts/KioskSessionContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
+import KioskGlobalEngine from './components/KioskGlobalEngine';
 import './App.css';
 
 // Pages publiques - chargées immédiatement
@@ -70,8 +72,9 @@ function App() {
     <ErrorBoundary>
       <LanguageProvider>
         <Router>
-          <Suspense fallback={<LoadingFallback />}>
-            <Routes>
+          <KioskSessionProvider>
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
               {/* Routes avec Navbar et Footer */}
               <Route path="/" element={<PublicLayout><Home /></PublicLayout>} />
               <Route path="/inscription" element={<PublicLayout><Inscription /></PublicLayout>} />
@@ -119,8 +122,10 @@ function App() {
             </ProtectedRoute>
           } 
         />
-            </Routes>
-          </Suspense>
+              </Routes>
+            </Suspense>
+            <KioskGlobalEngine />
+          </KioskSessionProvider>
         </Router>
       </LanguageProvider>
     </ErrorBoundary>
