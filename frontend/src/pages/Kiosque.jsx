@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import faceRecognitionService from '../services/faceRecognitionService';
 import { attendanceService } from '../services/attendanceService';
@@ -8,6 +8,7 @@ import {
   getKioskSlotsForEmployee,
   pickKioskActionForNow,
   hasKioskScheduleConfig,
+  isAnyKioskSlotActiveNow,
 } from '../utils/kioskSchedule';
 
 /**
@@ -364,6 +365,13 @@ export default function Kiosque() {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
 
+  const strictSchedule =
+    !!kioskAttendance?.enabled && hasKioskScheduleConfig(kioskAttendance);
+  const inAnyCompanySlot = useMemo(
+    () => isAnyKioskSlotActiveNow(kioskAttendance, currentTime),
+    [kioskAttendance, currentTime],
+  );
+
   return (
     <div className="min-h-screen bg-[#002222] flex flex-col select-none" style={{ fontFamily: "'Instrument Sans', sans-serif" }}>
 
@@ -391,6 +399,22 @@ export default function Kiosque() {
           )}
         </div>
       </div>
+
+      {isActive && strictSchedule && !inAnyCompanySlot && (
+        <div className="mx-10 mb-2 px-4 py-3 rounded-xl bg-amber-900/90 border border-amber-600/50 text-amber-100 text-sm text-center leading-snug">
+          <strong className="text-amber-50">Hors plage horaire.</strong>{' '}
+          L’heure actuelle du PC est <strong>{formattedTime}</strong> — avec la configuration actuelle, aucun pointage
+          automatique n’est enregistré <em>en dehors</em> des créneaux « Entrée » / « Sortie » définis dans{' '}
+          <strong>Config. kiosque</strong>. Revenez pendant un créneau, ou ajustez les heures pour un test.
+        </div>
+      )}
+
+      {isActive && strictSchedule && inAnyCompanySlot && (
+        <div className="mx-10 mb-2 px-4 py-2 rounded-xl bg-emerald-900/50 border border-emerald-600/40 text-emerald-100 text-xs text-center">
+          Plage horaire active : le pointage peut s’enregistrer si le visage est reconnu (et le département
+          correspond à une équipe configurée le cas échéant).
+        </div>
+      )}
 
       {/* Zone principale */}
       <div className="flex flex-1 gap-6 px-10 pb-8">

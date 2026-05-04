@@ -65,3 +65,25 @@ export function hasKioskScheduleConfig(kioskAttendance) {
   );
   return def || team;
 }
+
+/** Y a-t-il au moins un créneau (défaut ou équipe) actif à cette heure ? Sert à afficher « hors plage » sur le kiosque. */
+export function isAnyKioskSlotActiveNow(kioskAttendance, date = new Date()) {
+  if (!kioskAttendance?.enabled || !hasKioskScheduleConfig(kioskAttendance)) {
+    return true;
+  }
+  const slots = [];
+  if (Array.isArray(kioskAttendance.defaultSlots)) {
+    slots.push(...kioskAttendance.defaultSlots);
+  }
+  for (const t of kioskAttendance.teamOverrides || []) {
+    if (t?.enabled && Array.isArray(t.slots)) {
+      slots.push(...t.slots);
+    }
+  }
+  for (const s of slots) {
+    if (s?.start && s?.end && isNowInSlot(s.start, s.end, date)) {
+      return true;
+    }
+  }
+  return false;
+}
