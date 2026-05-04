@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post, Request, UseGuards, Version, HttpException, Param, NotFoundException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Patch, Post, Request, UseGuards, Version, HttpException, Param, NotFoundException } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { InviteRHDto } from './dto/invite-rh.dto';
+import { UpdateKioskAttendanceDto } from './dto/update-kiosk-attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -40,6 +41,28 @@ export class CompaniesController {
       return { companyId: null, message: 'Aucune entreprise associée à cet utilisateur' };
     }
     return { companyId };
+  }
+
+  /** Infos entreprise courante (dont configuration kiosque) — tout employé de l'entreprise */
+  @Get('my-company')
+  @Version('1')
+  async getMyCompany(@Request() req: any) {
+    const company = await this.companiesService.findMyCompanyForUser(req.user.userId);
+    if (!company) {
+      return { company: null, message: 'Aucune entreprise associée à cet utilisateur' };
+    }
+    return { company };
+  }
+
+  /** Mise à jour configuration kiosque — propriétaire ou RH uniquement */
+  @Patch('my-company/kiosk')
+  @Version('1')
+  async patchMyCompanyKiosk(@Request() req: any, @Body() dto: UpdateKioskAttendanceDto) {
+    return this.companiesService.updateKioskAttendance(
+      req.user.userId,
+      req.user.roles || [],
+      dto,
+    );
   }
 
   @Post('invite-rh')

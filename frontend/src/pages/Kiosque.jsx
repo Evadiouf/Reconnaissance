@@ -4,6 +4,11 @@ import faceRecognitionService from '../services/faceRecognitionService';
 import { attendanceService } from '../services/attendanceService';
 import companiesService from '../services/companiesService';
 import cameraSyncService from '../services/cameraSyncService';
+import {
+  getKioskSlotsForEmployee,
+  pickKioskActionForNow,
+  hasKioskScheduleConfig,
+} from '../utils/kioskSchedule';
 
 /**
  * Page Kiosque — mode automatique plein écran
@@ -23,6 +28,9 @@ export default function Kiosque() {
   const hlsRef = useRef(null);
   const captureTimerRef = useRef(null);
   const recentlyRecognized = useRef(new Map()); // employeeId → timestamp
+  const userPausedKioskRef = useRef(false);
+  const kioskAttendanceRef = useRef(null);
+  const employeeDeptByIdRef = useRef(new Map());
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [companyId, setCompanyId] = useState(null);
@@ -35,6 +43,11 @@ export default function Kiosque() {
   const [recentEvents, setRecentEvents] = useState([]);
   const [apiStatus, setApiStatus] = useState(null);
   const [isActive, setIsActive] = useState(false);
+  const [kioskAttendance, setKioskAttendance] = useState(null);
+
+  useEffect(() => {
+    kioskAttendanceRef.current = kioskAttendance;
+  }, [kioskAttendance]);
 
   // Horloge en temps réel
   useEffect(() => {
@@ -42,23 +55,48 @@ export default function Kiosque() {
     return () => clearInterval(timer);
   }, []);
 
-  // Charger companyId et infos entreprise
+  // Charger companyId, nom et configuration kiosque (polling ~1 min pour appliquer les changements RH)
   useEffect(() => {
     const loadCompany = async () => {
       try {
         const id = await companiesService.getMyCompanyId();
-        if (id) {
-          setCompanyId(id);
-          try {
-            const info = await companiesService.getMyCompany();
-            if (info?.name) setCompanyName(info.name);
-          } catch (_) {}
+        if (id) setCompanyId(id);
+        const info = await companiesService.getMyCompany();
+        if (info?.name) setCompanyName(info.name);
+        const ka = info?.kioskAttendance ?? null;
+        setKioskAttendance(ka);
+        kioskAttendanceRef.current = ka;
+
+        if (ka && !ka.enabled) {
+          setIsActive(false);
+        } else if (ka && hasKioskScheduleConfig(ka) && !userPausedKioskRef.current) {
+          setIsActive(true);
         }
       } catch (err) {
-        console.error('Impossible de charger le companyId:', err);
+        console.error('Impossible de charger le companyId / entreprise:', err);
       }
     };
     loadCompany();
+    const t = setInterval(loadCompany, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Départements employés (pour plages par équipe)
+  useEffect(() => {
+    const loadDepts = async () => {
+      try {
+        const list = await companiesService.getCompanyEmployees();
+        const m = new Map();
+        for (const e of Array.isArray(list) ? list : []) {
+          const id = e?.id || e?._id;
+          if (id) m.set(String(id), e?.department || '');
+        }
+        employeeDeptByIdRef.current = m;
+      } catch (_) {}
+    };
+    loadDepts();
+    const t = setInterval(loadDepts, 120000);
+    return () => clearInterval(t);
   }, []);
 
   // Charger l'URL HLS depuis la caméra active configurée
@@ -150,12 +188,19 @@ export default function Kiosque() {
   const captureFrame = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || video.videoWidth === 0) return null;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    if (!video || !canvas) return null;
+    if (video.readyState < 2) return null;
+    const w = video.videoWidth || video.clientWidth || 640;
+    const h = video.videoHeight || video.clientHeight || 480;
+    if (w === 0 || h === 0) return null;
+    canvas.width = w;
+    canvas.height = h;
+    try {
+      canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+      return canvas.toDataURL('image/jpeg', 0.85);
+    } catch (_) {
+      return null;
+    }
   }, []);
 
   // Afficher le feedback de pointage
@@ -211,39 +256,83 @@ export default function Kiosque() {
         await companiesService.attachEmployeeToMyCompany(employeeId);
       } catch (_) {}
 
-      // Déterminer si c'est une entrée ou sortie en tentant clock-in d'abord
+      const ka = kioskAttendanceRef.current;
+      const strict =
+        ka?.enabled && hasKioskScheduleConfig(ka);
+      const dept = employeeDeptByIdRef.current.get(employeeId) || '';
+      const slots = strict ? getKioskSlotsForEmployee(ka, dept) : null;
+      const scheduledAction =
+        strict && slots?.length ? pickKioskActionForNow(slots, new Date()) : null;
+
       let pointageType = 'in';
       let displayName = person.displayName || employeeId;
 
-      try {
-        const res = await attendanceService.clockIn({
-          companyId,
-          employeeId,
-          source: 'kiosk',
-          notes: `Kiosque automatique — ${(person.similarity * 100).toFixed(1)}% confiance`,
-        });
-        displayName = res?.employeeName || displayName;
-        pointageType = 'in';
-        console.log('⏱️ Clock-in enregistré pour', employeeId);
-      } catch (clockInErr) {
-        // Si déjà pointé en entrée → tenter clock-out
-        if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
+      if (strict && slots?.length) {
+        if (!scheduledAction) {
+          return;
+        }
+        if (scheduledAction === 'clock_in') {
+          try {
+            const res = await attendanceService.clockIn({
+              companyId,
+              employeeId,
+              source: 'kiosk',
+              notes: `Kiosque (plage entrée) — ${(person.similarity * 100).toFixed(1)}%`,
+            });
+            displayName = res?.employeeName || displayName;
+            pointageType = 'in';
+          } catch (clockInErr) {
+            if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
+              return;
+            }
+            console.error('Erreur clock-in:', clockInErr?.message);
+            return;
+          }
+        } else {
           try {
             const res = await attendanceService.clockOut({
               companyId,
               employeeId,
-              notes: `Kiosque automatique — sortie`,
+              notes: `Kiosque (plage sortie) — ${(person.similarity * 100).toFixed(1)}%`,
             });
             displayName = res?.employeeName || displayName;
             pointageType = 'out';
-            console.log('⏱️ Clock-out enregistré pour', employeeId);
           } catch (clockOutErr) {
             console.error('Erreur clock-out:', clockOutErr?.message);
             return;
           }
-        } else {
-          console.error('Erreur clock-in:', clockInErr?.message);
-          return;
+        }
+      } else {
+        // Comportement historique : entrée puis sortie si entrée déjà ouverte
+        try {
+          const res = await attendanceService.clockIn({
+            companyId,
+            employeeId,
+            source: 'kiosk',
+            notes: `Kiosque automatique — ${(person.similarity * 100).toFixed(1)}% confiance`,
+          });
+          displayName = res?.employeeName || displayName;
+          pointageType = 'in';
+          console.log('⏱️ Clock-in enregistré pour', employeeId);
+        } catch (clockInErr) {
+          if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
+            try {
+              const res = await attendanceService.clockOut({
+                companyId,
+                employeeId,
+                notes: `Kiosque automatique — sortie`,
+              });
+              displayName = res?.employeeName || displayName;
+              pointageType = 'out';
+              console.log('⏱️ Clock-out enregistré pour', employeeId);
+            } catch (clockOutErr) {
+              console.error('Erreur clock-out:', clockOutErr?.message);
+              return;
+            }
+          } else {
+            console.error('Erreur clock-in:', clockInErr?.message);
+            return;
+          }
         }
       }
 
@@ -347,7 +436,11 @@ export default function Kiosque() {
                     </svg>
                     <p className="text-red-400 text-sm text-center whitespace-pre-line">{videoError}</p>
                     <button
-                      onClick={() => { setIsActive(false); setTimeout(() => setIsActive(true), 500); }}
+                      onClick={() => {
+                        userPausedKioskRef.current = false;
+                        setIsActive(false);
+                        setTimeout(() => setIsActive(true), 500);
+                      }}
                       className="mt-4 px-4 py-2 bg-[#0389A6] text-white rounded-xl text-sm hover:bg-[#027A94]"
                     >
                       Réessayer
@@ -399,9 +492,16 @@ export default function Kiosque() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                 </svg>
                 <p className="text-white text-xl mb-2">Kiosque de pointage</p>
-                <p className="text-gray-400 text-sm mb-8">Cliquez sur Démarrer pour activer la reconnaissance</p>
+                <p className="text-gray-400 text-sm mb-8">
+                  {kioskAttendance?.enabled && hasKioskScheduleConfig(kioskAttendance)
+                    ? 'Le mode automatique est activé par votre entreprise — le flux démarre tout seul.'
+                    : 'Cliquez sur Démarrer pour activer la reconnaissance'}
+                </p>
                 <button
-                  onClick={() => setIsActive(true)}
+                  onClick={() => {
+                    userPausedKioskRef.current = false;
+                    setIsActive(true);
+                  }}
                   className="px-8 py-3 bg-[#0389A6] text-white rounded-2xl text-lg font-semibold hover:bg-[#027A94] transition-colors"
                 >
                   ▶ Démarrer le kiosque
@@ -469,14 +569,22 @@ export default function Kiosque() {
           <div className="bg-[#003333] rounded-2xl p-4 space-y-2">
             {isActive ? (
               <button
-                onClick={() => { setIsActive(false); setVideoConnected(false); setVideoError(null); }}
+                onClick={() => {
+                  userPausedKioskRef.current = true;
+                  setIsActive(false);
+                  setVideoConnected(false);
+                  setVideoError(null);
+                }}
                 className="w-full px-4 py-2.5 bg-red-800 text-red-200 rounded-xl text-sm hover:bg-red-700 transition-colors"
               >
                 ⏹ Arrêter le kiosque
               </button>
             ) : (
               <button
-                onClick={() => setIsActive(true)}
+                onClick={() => {
+                  userPausedKioskRef.current = false;
+                  setIsActive(true);
+                }}
                 className="w-full px-4 py-2.5 bg-[#0389A6] text-white rounded-xl text-sm hover:bg-[#027A94] transition-colors"
               >
                 ▶ Démarrer le kiosque

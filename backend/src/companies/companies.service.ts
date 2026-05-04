@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +10,7 @@ import { InviteRHDto } from './dto/invite-rh.dto';
 import { EmailService } from '../email/email.service';
 import { InvitationsService } from '../invitations/invitations.service';
 import { FaceRecognitionService } from '../face-recognition/face-recognition.service';
+import { UpdateKioskAttendanceDto } from './dto/update-kiosk-attendance.dto';
 
 @Injectable()
 export class CompaniesService {
@@ -341,5 +342,109 @@ export class CompaniesService {
     console.log(`✅ Entreprise ${companyId} supprimée définitivement`);
 
     return { deleted: true };
+  }
+
+  /** Entreprise liée à l'utilisateur (propriétaire ou employé), champs utiles au kiosque */
+  async findMyCompanyForUser(userId: string): Promise<{
+    _id: string;
+    name: string;
+    kioskAttendance?: Record<string, unknown>;
+  } | null> {
+    const userObjectId = new Types.ObjectId(userId);
+    const company = await this.companyModel
+      .findOne({
+        $or: [{ owner: userObjectId }, { employees: userObjectId }],
+      })
+      .select('name kioskAttendance')
+      .lean()
+      .exec();
+    if (!company) return null;
+    return {
+      _id: (company as any)._id.toString(),
+      name: (company as any).name,
+      kioskAttendance: (company as any).kioskAttendance,
+    };
+  }
+
+  private normalizeDepartmentKey(key: string): string {
+    return String(key || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
+  private canManageKiosk(
+    company: { owner: Types.ObjectId },
+    userId: string,
+    roles: string[],
+  ): boolean {
+    const ownerId = (company.owner as any)?.toString?.() || String(company.owner);
+    if (ownerId === userId) return true;
+    if (Array.isArray(roles) && roles.includes('rh')) return true;
+    return false;
+  }
+
+  async updateKioskAttendance(
+    userId: string,
+    roles: string[],
+    dto: UpdateKioskAttendanceDto,
+  ): Promise<{ _id: string; name: string; kioskAttendance: Record<string, unknown> }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const company = await this.companyModel
+      .findOne({
+        $or: [{ owner: userObjectId }, { employees: userObjectId }],
+      })
+      .exec();
+
+    if (!company) {
+      throw new NotFoundException('Aucune entreprise associée à votre compte');
+    }
+
+    if (!this.canManageKiosk(company as any, userId, roles)) {
+      throw new ForbiddenException(
+        'Seul le propriétaire de l’entreprise ou un compte RH peut modifier la configuration kiosque',
+      );
+    }
+
+    const teamOverrides = (dto.teamOverrides || [])
+      .map((t) => ({
+        departmentKey: this.normalizeDepartmentKey(t.departmentKey),
+        label: t.label?.trim() || undefined,
+        enabled: !!t.enabled,
+        slots: (t.slots || []).map((s) => ({
+          start: s.start,
+          end: s.end,
+          action: s.action,
+        })),
+      }))
+      .filter((t) => t.departmentKey.length > 0);
+
+    if (dto.enabled) {
+      const hasDefault = (dto.defaultSlots || []).length > 0;
+      const hasTeamSlots = teamOverrides.some((t) => t.enabled && (t.slots || []).length > 0);
+      if (!hasDefault && !hasTeamSlots) {
+        throw new BadRequestException(
+          'Pour activer le pointage kiosque par plages horaires, ajoutez au moins un créneau (entreprise ou équipe).',
+        );
+      }
+    }
+
+    (company as any).kioskAttendance = {
+      enabled: dto.enabled,
+      defaultSlots: (dto.defaultSlots || []).map((s) => ({
+        start: s.start,
+        end: s.end,
+        action: s.action,
+      })),
+      teamOverrides,
+    };
+
+    await company.save();
+
+    return {
+      _id: (company as any)._id.toString(),
+      name: (company as any).name,
+      kioskAttendance: (company as any).kioskAttendance,
+    };
   }
 }

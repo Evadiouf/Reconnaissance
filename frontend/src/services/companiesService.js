@@ -102,6 +102,18 @@ export const companiesService = {
     }
   },
 
+  /** Entreprise courante (nom, kioskAttendance, …) */
+  async getMyCompany() {
+    const response = await apiClient.get(`${COMPANIES_ENDPOINT}/my-company`);
+    return response.data?.company || null;
+  },
+
+  /** Mise à jour config pointage automatique kiosque (propriétaire ou RH) */
+  async updateKioskAttendance(payload) {
+    const response = await apiClient.patch(`${COMPANIES_ENDPOINT}/my-company/kiosk`, payload);
+    return response.data;
+  },
+
   async inviteRH({ email, role, department, sessionTimeout }) {
     const payload = {
       email: email?.trim().toLowerCase(),

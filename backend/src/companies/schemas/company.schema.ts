@@ -44,6 +44,23 @@ export class Company extends Document {
 
   @Prop({ trim: true, default: 'Actif' })
   status?: string;
+
+  /**
+   * Pointage automatique kiosque (optionnel).
+   * defaultSlots = tous les employés sans override actif.
+   * teamOverrides = clé département normalisée (trim + lower) ; si enabled + slots, priorité sur defaultSlots pour les employés de ce département.
+   */
+  @Prop({ type: Object, required: false })
+  kioskAttendance?: {
+    enabled?: boolean;
+    defaultSlots?: Array<{ start: string; end: string; action: 'clock_in' | 'clock_out' }>;
+    teamOverrides?: Array<{
+      departmentKey: string;
+      label?: string;
+      enabled?: boolean;
+      slots?: Array<{ start: string; end: string; action: 'clock_in' | 'clock_out' }>;
+    }>;
+  };
 }
 
 export const CompanySchema = SchemaFactory.createForClass(Company);
