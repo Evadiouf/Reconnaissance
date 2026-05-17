@@ -17,7 +17,10 @@ import {
 
 const DEFAULT_HLS_URL = 'http://localhost:8888/camera/index.m3u8';
 const CAPTURE_INTERVAL_MS = 2500;
-const COOLDOWN_PER_PERSON_MS = 30000;
+/** Délai après un pointage RÉUSSI : 2 minutes pour éviter les doubles pointages. */
+const COOLDOWN_PER_PERSON_MS = 120000;
+/** Délai après une tentative ÉCHOUÉE : 60 s pour éviter les boucles de retry. */
+const FAILURE_COOLDOWN_MS = 60000;
 /** Seuil similarité (0–1). 0,50 était trop strict avec éclairage / balance caméra ; 0,40 aligne ~niveau « utile » sans descendre en FAIBLE extrême. */
 const CONFIDENCE_THRESHOLD = 0.4;
 const FEEDBACK_DURATION_MS = 4000;
@@ -360,8 +363,17 @@ export default function KioskGlobalEngine() {
       let pointageType = 'in';
       let displayName = person.displayName || employeeId;
 
+      // Pose un cooldown d'échec pour éviter les boucles de retry (60 s).
+      const failCooldown = () => {
+        recentlyRecognized.current.set(
+          employeeId,
+          Date.now() - COOLDOWN_PER_PERSON_MS + FAILURE_COOLDOWN_MS,
+        );
+      };
+
       if (strict && slots?.length) {
         if (!scheduledAction) {
+          failCooldown();
           showFeedback(displayName, 'warn', 'Hors creneau actif pour ce profil');
           await playSound('failure');
           return;
@@ -377,8 +389,9 @@ export default function KioskGlobalEngine() {
             displayName = res?.employeeName || displayName;
             pointageType = 'in';
           } catch (clockInErr) {
+            failCooldown();
             if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
-              showFeedback(displayName, 'warn', "Entree deja ouverte ou employee non autorise");
+              showFeedback(displayName, 'warn', 'Entree deja ouverte ou employee non autorise');
               await playSound('failure');
               return;
             }
@@ -396,6 +409,7 @@ export default function KioskGlobalEngine() {
             displayName = res?.employeeName || displayName;
             pointageType = 'out';
           } catch (clockOutErr) {
+            failCooldown();
             if (clockOutErr?.response?.status === 409 || clockOutErr?.response?.status === 400) {
               showFeedback(displayName, 'warn', 'Aucune entree ouverte pour effectuer une sortie');
               await playSound('failure');
@@ -440,6 +454,7 @@ export default function KioskGlobalEngine() {
             displayName = res?.employeeName || displayName;
             pointageType = 'out';
           } catch (clockOutErr) {
+            failCooldown();
             if (clockOutErr?.response?.status === 409 || clockOutErr?.response?.status === 400) {
               showFeedback(displayName, 'warn', 'Aucune entree ouverte pour effectuer une sortie');
             } else {
@@ -470,11 +485,13 @@ export default function KioskGlobalEngine() {
                 displayName = res?.employeeName || displayName;
                 pointageType = 'out';
               } catch (_) {
+                failCooldown();
                 showFeedback(displayName, 'warn', 'Impossible de faire la sortie automatique');
                 await playSound('failure');
                 return;
               }
             } else {
+              failCooldown();
               showFeedback(displayName, 'warn', 'Echec du pointage automatique');
               await playSound('failure');
               return;
