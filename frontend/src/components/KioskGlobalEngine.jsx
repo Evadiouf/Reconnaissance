@@ -12,6 +12,7 @@ import {
   pickKioskActionForNow,
   hasKioskScheduleConfig,
   isAnyKioskSlotActiveNow,
+  normalizeDepartmentKey,
 } from '../utils/kioskSchedule';
 
 const DEFAULT_HLS_URL = 'http://localhost:8888/camera/index.m3u8';
@@ -406,34 +407,78 @@ export default function KioskGlobalEngine() {
           }
         }
       } else {
-        try {
-          const res = await attendanceService.clockIn({
-            companyId,
-            employeeId,
-            source: 'kiosk',
-            notes: `Kiosque automatique — ${(person.similarity * 100).toFixed(1)}% confiance`,
-          });
-          displayName = res?.employeeName || displayName;
-          pointageType = 'in';
-        } catch (clockInErr) {
-          if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
-            try {
-              const res = await attendanceService.clockOut({
-                companyId,
-                employeeId,
-                notes: 'Kiosque automatique — sortie',
-              });
-              displayName = res?.employeeName || displayName;
-              pointageType = 'out';
-            } catch (_) {
-              showFeedback(displayName, 'warn', 'Impossible de faire la sortie automatique');
+        // Mode de base (plages horaires désactivées) :
+        // On consulte quand même les créneaux configurés pour savoir si on est
+        // dans un créneau "Sortie". Si oui → clockOut directement.
+        // Si non → clockIn avec bascule auto sur clockOut si l'API retourne 409.
+        const baseDept = normalizeDepartmentKey(
+          employeeDeptByIdRef.current.get(employeeId) || '',
+        );
+        const baseOverrides = Array.isArray(ka?.teamOverrides) ? ka.teamOverrides : [];
+        let softSlots = null;
+        for (const t of baseOverrides) {
+          if (!t?.enabled) continue;
+          const tKey = normalizeDepartmentKey(t.departmentKey);
+          if (tKey && tKey === baseDept && Array.isArray(t.slots) && t.slots.length > 0) {
+            softSlots = t.slots;
+            break;
+          }
+        }
+        if (!softSlots && Array.isArray(ka?.defaultSlots) && ka.defaultSlots.length > 0) {
+          softSlots = ka.defaultSlots;
+        }
+        const softAction = softSlots?.length ? pickKioskActionForNow(softSlots, new Date()) : null;
+
+        if (softAction === 'clock_out') {
+          // Créneau "Sortie" détecté → effectuer la sortie directement
+          try {
+            const res = await attendanceService.clockOut({
+              companyId,
+              employeeId,
+              notes: `Kiosque automatique (créneau sortie) — ${(person.similarity * 100).toFixed(1)}% confiance`,
+            });
+            displayName = res?.employeeName || displayName;
+            pointageType = 'out';
+          } catch (clockOutErr) {
+            if (clockOutErr?.response?.status === 409 || clockOutErr?.response?.status === 400) {
+              showFeedback(displayName, 'warn', 'Aucune entree ouverte pour effectuer une sortie');
+            } else {
+              showFeedback(displayName, 'warn', 'Echec du pointage sortie');
+            }
+            await playSound('failure');
+            return;
+          }
+        } else {
+          // Créneau "Entrée" ou aucun créneau → clockIn avec bascule sur clockOut si 409
+          try {
+            const res = await attendanceService.clockIn({
+              companyId,
+              employeeId,
+              source: 'kiosk',
+              notes: `Kiosque automatique — ${(person.similarity * 100).toFixed(1)}% confiance`,
+            });
+            displayName = res?.employeeName || displayName;
+            pointageType = 'in';
+          } catch (clockInErr) {
+            if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
+              try {
+                const res = await attendanceService.clockOut({
+                  companyId,
+                  employeeId,
+                  notes: 'Kiosque automatique — sortie',
+                });
+                displayName = res?.employeeName || displayName;
+                pointageType = 'out';
+              } catch (_) {
+                showFeedback(displayName, 'warn', 'Impossible de faire la sortie automatique');
+                await playSound('failure');
+                return;
+              }
+            } else {
+              showFeedback(displayName, 'warn', 'Echec du pointage automatique');
               await playSound('failure');
               return;
             }
-          } else {
-            showFeedback(displayName, 'warn', 'Echec du pointage automatique');
-            await playSound('failure');
-            return;
           }
         }
       }
