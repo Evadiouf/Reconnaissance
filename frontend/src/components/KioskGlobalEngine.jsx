@@ -6,6 +6,7 @@ import { attendanceService } from '../services/attendanceService';
 import companiesService from '../services/companiesService';
 import cameraSyncService from '../services/cameraSyncService';
 import authService from '../services/authService';
+import usersService from '../services/usersService';
 import { useKioskSession } from '../contexts/KioskSessionContext';
 import {
   getKioskSlotsForEmployee,
@@ -43,6 +44,7 @@ export default function KioskGlobalEngine() {
   const lastNoFaceHintAtRef = useRef(0);
   const kioskAttendanceRef = useRef(null);
   const employeeDeptByIdRef = useRef(new Map());
+  const employeeNameByIdRef = useRef(new Map());
   const audioRef = useRef({ success: null, failure: null, checkout: null });
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -179,13 +181,47 @@ export default function KioskGlobalEngine() {
 
     const loadDepts = async () => {
       try {
-        const list = await companiesService.getCompanyEmployees();
-        const map = new Map();
-        for (const e of Array.isArray(list) ? list : []) {
+        const deptMap = new Map();
+        const nameMap = new Map();
+
+        /** Extrait le nom lisible d'un objet utilisateur/employé */
+        const extractName = (e) =>
+          e?.fullName ||
+          e?.nomComplet ||
+          (e?.firstName || e?.prenom
+            ? `${e?.firstName || e?.prenom || ''} ${e?.lastName || e?.nom || ''}`.trim()
+            : null) ||
+          e?.name ||
+          null;
+
+        // 1) Employés de l'entreprise (liste RH standard)
+        const companyList = await companiesService.getCompanyEmployees();
+        for (const e of Array.isArray(companyList) ? companyList : []) {
           const id = e?.id || e?._id;
-          if (id) map.set(String(id), e?.department || '');
+          if (!id) continue;
+          deptMap.set(String(id), e?.department || '');
+          const n = extractName(e);
+          if (n) nameMap.set(String(id), n);
         }
-        employeeDeptByIdRef.current = map;
+
+        // 2) Tous les utilisateurs (inclut l'admin/propriétaire qui peut ne pas
+        //    figurer dans getCompanyEmployees mais qui peut être reconnu par la caméra)
+        const allUsers = await usersService.getAll();
+        for (const u of Array.isArray(allUsers) ? allUsers : []) {
+          const id = u?.id || u?._id;
+          if (!id) continue;
+          // N'écrase pas une valeur déjà présente depuis la liste RH
+          if (!deptMap.has(String(id)) || !deptMap.get(String(id))) {
+            deptMap.set(String(id), u?.department || '');
+          }
+          if (!nameMap.has(String(id))) {
+            const n = extractName(u);
+            if (n) nameMap.set(String(id), n);
+          }
+        }
+
+        employeeDeptByIdRef.current = deptMap;
+        employeeNameByIdRef.current = nameMap;
       } catch (_) {}
     };
 
@@ -361,7 +397,10 @@ export default function KioskGlobalEngine() {
       const scheduledAction = strict && slots?.length ? pickKioskActionForNow(slots, new Date()) : null;
 
       let pointageType = 'in';
-      let displayName = person.displayName || employeeId;
+      let displayName =
+        person.displayName ||
+        employeeNameByIdRef.current.get(employeeId) ||
+        employeeId;
 
       // Pose un cooldown d'échec pour éviter les boucles de retry (60 s).
       const failCooldown = () => {
