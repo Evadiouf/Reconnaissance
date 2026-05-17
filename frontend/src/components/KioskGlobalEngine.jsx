@@ -17,7 +17,8 @@ import {
 const DEFAULT_HLS_URL = 'http://localhost:8888/camera/index.m3u8';
 const CAPTURE_INTERVAL_MS = 2500;
 const COOLDOWN_PER_PERSON_MS = 30000;
-const CONFIDENCE_THRESHOLD = 0.5;
+/** Seuil similarité (0–1). 0,50 était trop strict avec éclairage / balance caméra ; 0,40 aligne ~niveau « utile » sans descendre en FAIBLE extrême. */
+const CONFIDENCE_THRESHOLD = 0.4;
 const FEEDBACK_DURATION_MS = 4000;
 
 export default function KioskGlobalEngine() {
@@ -152,9 +153,11 @@ export default function KioskGlobalEngine() {
         setKioskAttendance(ka);
         kioskAttendanceRef.current = ka;
 
-        if (ka && !ka.enabled) {
-          setKioskRunning(false);
-        } else if (ka && hasKioskScheduleConfig(ka) && !userPausedKioskRef.current) {
+        // ka.enabled contrôle le MODE PLAGES HORAIRES, pas l'arrêt du kiosque.
+        // On ne force jamais l'arrêt automatiquement : l'utilisateur garde le contrôle.
+        // On démarre automatiquement seulement si le schedule est configuré et que
+        // l'utilisateur n'a pas explicitement arrêté le kiosque.
+        if (ka?.enabled && hasKioskScheduleConfig(ka) && !userPausedKioskRef.current) {
           setKioskRunning(true);
         }
       } catch (err) {
@@ -265,7 +268,11 @@ export default function KioskGlobalEngine() {
         hlsRef.current = null;
       }
     };
-  }, [isLoggedIn, kioskActive, hlsUrl, isKioskRoute]);
+  // isKioskRoute retiré des dépendances : on ne veut pas recréer HLS à chaque
+  // changement de route (fullscreen ↔ widget flottant), cela causait des
+  // reconnexions inutiles et les logs "destroyed: not used anymore" dans MediaMTX.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, kioskActive, hlsUrl]);
 
   const captureFrame = useCallback(() => {
     const video = videoRef.current;

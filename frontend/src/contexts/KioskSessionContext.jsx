@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -9,9 +10,36 @@ import {
 
 const KioskSessionContext = createContext(null);
 
+const STORAGE_KEY = 'kioskActive';
+
 export function KioskSessionProvider({ children }) {
   const userPausedKioskRef = useRef(false);
-  const [kioskActive, setKioskActive] = useState(false);
+
+  const [kioskActive, setKioskActive] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Persiste l'état dans localStorage pour survivre aux rafraîchissements de page
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, String(kioskActive));
+    } catch (_) {}
+  }, [kioskActive]);
+
+  // Restaure userPausedKioskRef selon l'état persisté au démarrage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === 'false') {
+        // Le kiosque avait été arrêté explicitement
+        userPausedKioskRef.current = true;
+      }
+    } catch (_) {}
+  }, []);
 
   /** Démarrage explicite (bouton ou auto-config) — efface la pause utilisateur */
   const startKiosk = useCallback(() => {
@@ -26,7 +54,7 @@ export function KioskSessionProvider({ children }) {
   }, []);
 
   /**
-   * Activer / désactiver sans toucher à userPaused — désactivation RH, reconnect HLS, etc.
+   * Activer / désactiver sans toucher à userPaused — reconnect HLS, auto-start schedule, etc.
    */
   const setKioskRunning = useCallback((active) => {
     setKioskActive(!!active);

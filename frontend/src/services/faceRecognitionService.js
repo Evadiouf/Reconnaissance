@@ -200,22 +200,28 @@ const faceRecognitionService = {
    */
   isValidDetection: (detection, minConfidence = 0.45) => {
     if (!detection) return false;
-    
+
     // Si c'est un objet avec personName (format du callback)
     if (detection.personName) {
       const similarity = detection.similarity || 0;
       return similarity >= minConfidence;
     }
-    
-    // Vérifier le niveau de confiance (format API)
+
+    // Format API : la similarité est le critère principal (aligné avec MOYENNE / HAUTE).
+    // Ancien bug : exiger levelValue >= minConfidence ET similarity >= minConfidence
+    // rejetait toutes les détections MOYENNE (plancher 0.45) dès que minConfidence > 0.45.
+    const sim = Number(detection.similarity);
+    if (Number.isFinite(sim)) {
+      return sim >= minConfidence;
+    }
+
     const confidenceLevels = {
-      'HAUTE': 0.65,
-      'MOYENNE': 0.45,
-      'FAIBLE': 0.35
+      HAUTE: 0.65,
+      MOYENNE: 0.45,
+      FAIBLE: 0.35,
     };
-    
     const levelValue = confidenceLevels[detection.confidence_level] || 0;
-    return levelValue >= minConfidence && (detection.similarity || 0) >= minConfidence;
+    return levelValue >= minConfidence;
   },
 
   /**
