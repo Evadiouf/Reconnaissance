@@ -529,6 +529,60 @@ export class CompaniesService {
     };
   }
 
+  /**
+   * Synchronise les créneaux kiosque à partir des horaires (schedules).
+   * Appelé automatiquement après chaque création/modification/suppression d'horaire.
+   */
+  async syncKioskSlotsFromSchedules(
+    companyId: string,
+    schedules: Array<{ startTime: string; endTime: string; department?: string }>,
+  ): Promise<void> {
+    const company = await this.companyModel.findById(companyId).exec();
+    if (!company) return;
+
+    const adjustTime = (time: string, minutesDelta: number): string => {
+      const [h, m] = time.split(':').map(Number);
+      const total = Math.max(0, Math.min(h * 60 + m + minutesDelta, 23 * 60 + 59));
+      return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    };
+
+    const defaultSlots: Array<{ start: string; end: string; action: 'clock_in' | 'clock_out' }> = [];
+    const teamMap = new Map<string, { slots: typeof defaultSlots; label: string }>();
+
+    for (const schedule of schedules) {
+      const dept = (schedule.department || 'Tous').trim();
+      const isDefault = dept.toLowerCase() === 'tous' || dept === '';
+
+      const clockIn = { start: adjustTime(schedule.startTime, -30), end: adjustTime(schedule.startTime, 60), action: 'clock_in' as const };
+      const clockOut = { start: adjustTime(schedule.endTime, -30), end: adjustTime(schedule.endTime, 30), action: 'clock_out' as const };
+
+      if (isDefault) {
+        defaultSlots.push(clockIn, clockOut);
+      } else {
+        const key = this.normalizeDepartmentKey(dept);
+        if (!teamMap.has(key)) teamMap.set(key, { slots: [], label: dept });
+        teamMap.get(key)!.slots.push(clockIn, clockOut);
+      }
+    }
+
+    const teamOverrides = Array.from(teamMap.entries()).map(([key, val]) => ({
+      departmentKey: key,
+      label: val.label,
+      enabled: true,
+      slots: val.slots,
+    }));
+
+    const wasEnabled = (company as any).kioskAttendance?.enabled;
+
+    (company as any).kioskAttendance = {
+      enabled: wasEnabled ?? (defaultSlots.length > 0 || teamOverrides.length > 0),
+      defaultSlots,
+      teamOverrides,
+    };
+
+    await company.save();
+  }
+
   async getKioskTokenStatus(userId: string): Promise<{ hasToken: boolean; createdAt?: Date }> {
     const userObjectId = new Types.ObjectId(userId);
     const company = await this.companyModel

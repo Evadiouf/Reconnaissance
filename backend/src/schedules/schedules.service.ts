@@ -21,6 +21,15 @@ export class SchedulesService {
     return companyId;
   }
 
+  private async syncKioskSlots(companyId: string): Promise<void> {
+    const schedules = await this.scheduleModel
+      .find({ company: new Types.ObjectId(companyId) })
+      .select('startTime endTime department')
+      .lean()
+      .exec();
+    await this.companiesService.syncKioskSlotsFromSchedules(companyId, schedules);
+  }
+
   async listMyCompanySchedules(requesterUserId: string) {
     const companyId = await this.getRequesterCompanyId(requesterUserId);
     return this.scheduleModel
@@ -38,7 +47,9 @@ export class SchedulesService {
       workDays: Array.isArray(dto.workDays) ? dto.workDays : [],
       graceMinutes: dto.graceMinutes ?? 0,
     });
-    return created.save();
+    const saved = await created.save();
+    await this.syncKioskSlots(companyId);
+    return saved;
   }
 
   async updateMyCompanySchedule(requesterUserId: string, scheduleId: string, dto: UpdateScheduleDto) {
@@ -60,13 +71,15 @@ export class SchedulesService {
       throw new ForbiddenException('Accès interdit à cet horaire');
     }
 
-    return this.scheduleModel
+    const updated = await this.scheduleModel
       .findOneAndUpdate(
         { _id: schedule._id, company: new Types.ObjectId(companyId) },
         { $set: dto },
         { new: true },
       )
       .exec();
+    await this.syncKioskSlots(companyId);
+    return updated;
   }
 
   async deleteMyCompanySchedule(requesterUserId: string, scheduleId: string) {
@@ -83,6 +96,7 @@ export class SchedulesService {
       throw new NotFoundException('Horaire introuvable');
     }
 
+    await this.syncKioskSlots(companyId);
     return { message: 'Horaire supprimé' };
   }
 
