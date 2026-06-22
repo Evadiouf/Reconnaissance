@@ -15,6 +15,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FaceRecognitionService } from './face-recognition.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { KioskTokenGuard } from '../auth/guards/kiosk-token.guard';
 
 @Controller('face-recognition')
 export class FaceRecognitionController {
@@ -41,6 +42,20 @@ export class FaceRecognitionController {
         error: error.message || 'Erreur lors de la vérification de l\'API',
       };
     }
+  }
+
+  /**
+   * Reconnaissance faciale kiosque — authentifié par token kiosque (pas de JWT)
+   */
+  @Post('kiosk-recognize')
+  @UseGuards(KioskTokenGuard)
+  @HttpCode(HttpStatus.OK)
+  async kioskRecognizeFace(
+    @Body() body: { image_base64: string; confidence_threshold?: number },
+  ) {
+    return this.faceRecognitionService.recognizeFace(body.image_base64, {
+      confidenceThreshold: body.confidence_threshold,
+    });
   }
 
   /**

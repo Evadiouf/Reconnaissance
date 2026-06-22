@@ -12,6 +12,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { TimeEntry, TimeEntrySchema } from '../attendance/schemas/time-entry.schema';
 import { FaceRecognitionModule } from '../face-recognition/face-recognition.module';
+import { KioskAuthModule } from '../auth/kiosk-auth.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { FaceRecognitionModule } from '../face-recognition/face-recognition.modu
     EmailModule,
     InvitationsModule,
     FaceRecognitionModule,
+    KioskAuthModule,
   ],
   controllers: [CompaniesController, CompanyTypesController],
   providers: [CompaniesService, CompanyTypesService, RolesGuard],

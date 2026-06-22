@@ -158,6 +158,33 @@ const faceRecognitionService = {
     }
   },
 
+  kioskRecognizeFace: async (imageSource, kioskToken, options = {}) => {
+    try {
+      const imageBase64 = await imageToBase64(imageSource);
+      const payload = {
+        image_base64: imageBase64,
+        confidence_threshold: options.confidenceThreshold || 0.35,
+      };
+      const response = await apiClient.post('/api/v1/face-recognition/kiosk-recognize', payload, {
+        headers: { 'x-kiosk-token': kioskToken },
+      });
+      const result = response.data;
+      return {
+        success: result.success,
+        message: result.message,
+        detections: result.detections || [],
+        processingTime: result.processing_time_ms,
+        frameWidth: result.frame_width,
+        frameHeight: result.frame_height,
+        recognizedPerson: result.detections?.find(
+          (det) => det.confidence_level === 'HAUTE' || det.confidence_level === 'MOYENNE',
+        ) || null,
+      };
+    } catch (error) {
+      throw error;
+    }
+  },
+
   /**
    * Reconnaît un visage via upload de fichier
    * @param {File} file - Fichier image à uploader

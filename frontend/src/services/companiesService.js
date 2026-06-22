@@ -108,6 +108,31 @@ export const companiesService = {
     return response.data?.company || null;
   },
 
+  /** Infos entreprise accessibles avec un token kiosque (sans JWT) */
+  async getKioskCompanyInfo(kioskToken) {
+    const response = await apiClient.get(`${COMPANIES_ENDPOINT}/kiosk-company-info`, {
+      headers: { 'x-kiosk-token': kioskToken },
+    });
+    return response.data;
+  },
+
+  /** Statut du token kiosque (actif ou non, date de création) */
+  async getKioskTokenStatus() {
+    const response = await apiClient.get(`${COMPANIES_ENDPOINT}/my-company/kiosk-token`);
+    return response.data;
+  },
+
+  /** Génère un nouveau token kiosque — invalide l'ancien immédiatement */
+  async generateKioskToken() {
+    const response = await apiClient.post(`${COMPANIES_ENDPOINT}/my-company/kiosk-token`);
+    return response.data;
+  },
+
+  /** Révoque le token kiosque actuel */
+  async revokeKioskToken() {
+    await apiClient.delete(`${COMPANIES_ENDPOINT}/my-company/kiosk-token`);
+  },
+
   /** Mise à jour config pointage automatique kiosque (propriétaire ou RH) */
   async updateKioskAttendance(payload) {
     const response = await apiClient.patch(`${COMPANIES_ENDPOINT}/my-company/kiosk`, payload);

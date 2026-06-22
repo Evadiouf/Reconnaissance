@@ -31,6 +31,20 @@ export default function KioskGlobalEngine() {
   const navigate = useNavigate();
   const { token, isAuthenticated } = authService.getStoredAuth();
   const isLoggedIn = !!token && !!isAuthenticated;
+
+  // Lecture du token kiosque depuis l'URL, puis localStorage
+  const [kioskToken] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get('kiosk_token');
+      if (urlToken) {
+        localStorage.setItem('kioskToken', urlToken);
+        return urlToken;
+      }
+      return localStorage.getItem('kioskToken') || null;
+    } catch { return null; }
+  });
+  const isKioskMode = !!kioskToken && !isLoggedIn;
   const isKioskRoute = location.pathname === '/kiosque';
 
   const { kioskActive, startKiosk, stopKiosk, setKioskRunning, userPausedKioskRef } = useKioskSession();
@@ -141,29 +155,54 @@ export default function KioskGlobalEngine() {
   }, []);
 
   useEffect(() => {
-    if (isLoggedIn) return;
+    if (isLoggedIn || isKioskMode) return;
     setKioskRunning(false);
     setCompanyId(null);
-  }, [isLoggedIn, setKioskRunning]);
+  }, [isLoggedIn, isKioskMode, setKioskRunning]);
 
   useEffect(() => {
-    if (!isLoggedIn) return undefined;
+    if (!isLoggedIn && !isKioskMode) return undefined;
 
     const loadCompany = async () => {
       try {
-        const id = await companiesService.getMyCompanyId();
+        let id = null;
+        let ka = null;
+
+        if (isKioskMode) {
+          const info = await companiesService.getKioskCompanyInfo(kioskToken);
+          id = info?.companyId ?? null;
+          if (info?.companyName) setCompanyName(info.companyName);
+          ka = info?.kioskAttendance ?? null;
+          // Pré-charger les employés depuis la réponse kiosque
+          if (Array.isArray(info?.employees)) {
+            const deptMap = new Map();
+            const nameMap = new Map();
+            for (const e of info.employees) {
+              const eid = e?.id || e?._id;
+              if (!eid) continue;
+              deptMap.set(String(eid), e?.department || '');
+              const name = `${e?.firstName || ''} ${e?.lastName || ''}`.trim();
+              if (name) nameMap.set(String(eid), name);
+            }
+            employeeDeptByIdRef.current = deptMap;
+            employeeNameByIdRef.current = nameMap;
+          }
+        } else {
+          id = await companiesService.getMyCompanyId();
+          const info = await companiesService.getMyCompany();
+          if (info?.name) setCompanyName(info.name);
+          ka = info?.kioskAttendance ?? null;
+        }
+
         if (id) setCompanyId(id);
-        const info = await companiesService.getMyCompany();
-        if (info?.name) setCompanyName(info.name);
-        const ka = info?.kioskAttendance ?? null;
         setKioskAttendance(ka);
         kioskAttendanceRef.current = ka;
 
-        // ka.enabled contrôle le MODE PLAGES HORAIRES, pas l'arrêt du kiosque.
-        // On ne force jamais l'arrêt automatiquement : l'utilisateur garde le contrôle.
-        // On démarre automatiquement seulement si le schedule est configuré et que
-        // l'utilisateur n'a pas explicitement arrêté le kiosque.
-        if (ka?.enabled && hasKioskScheduleConfig(ka) && !userPausedKioskRef.current) {
+        if (isKioskMode) {
+          // Mode kiosque autonome : toujours auto-démarrer à l'ouverture de la page
+          userPausedKioskRef.current = false;
+          setKioskRunning(true);
+        } else if (ka?.enabled && hasKioskScheduleConfig(ka) && !userPausedKioskRef.current) {
           setKioskRunning(true);
         }
       } catch (err) {
@@ -174,10 +213,10 @@ export default function KioskGlobalEngine() {
     loadCompany();
     const t = setInterval(loadCompany, 60000);
     return () => clearInterval(t);
-  }, [isLoggedIn, setKioskRunning, userPausedKioskRef]);
+  }, [isLoggedIn, isKioskMode, kioskToken, setKioskRunning, userPausedKioskRef]);
 
   useEffect(() => {
-    if (!isLoggedIn) return undefined;
+    if (!isLoggedIn) return undefined; // En mode kiosque, les employés sont déjà chargés via getKioskCompanyInfo
 
     const loadDepts = async () => {
       try {
@@ -247,7 +286,7 @@ export default function KioskGlobalEngine() {
   }, []);
 
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn && !isKioskMode) return;
     faceRecognitionService
       .checkHealth()
       .then((h) => setApiStatus(h?.status === 'ok' || h?.status === 'operational' ? 'ok' : 'warn'))
@@ -255,7 +294,7 @@ export default function KioskGlobalEngine() {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    if (!isLoggedIn || !kioskActive || !videoRef.current) return undefined;
+    if ((!isLoggedIn && !isKioskMode) || !kioskActive || !videoRef.current) return undefined;
 
     setVideoError(null);
     setVideoConnected(false);
@@ -348,16 +387,16 @@ export default function KioskGlobalEngine() {
   }, []);
 
   const runRecognition = useCallback(async () => {
-    if (!isLoggedIn || !kioskActive || isRecognizing || !videoConnected || !companyId) return;
+    if ((!isLoggedIn && !isKioskMode) || !kioskActive || isRecognizing || !videoConnected || !companyId) return;
 
     const imageData = captureFrame();
     if (!imageData) return;
 
     setIsRecognizing(true);
     try {
-      const result = await faceRecognitionService.recognizeFace(imageData, {
-        confidenceThreshold: CONFIDENCE_THRESHOLD,
-      });
+      const result = isKioskMode
+        ? await faceRecognitionService.kioskRecognizeFace(imageData, kioskToken, { confidenceThreshold: CONFIDENCE_THRESHOLD })
+        : await faceRecognitionService.recognizeFace(imageData, { confidenceThreshold: CONFIDENCE_THRESHOLD });
 
       const person = result?.recognizedPerson;
       if (!person || !faceRecognitionService.isValidDetection(person, CONFIDENCE_THRESHOLD)) {
@@ -419,7 +458,10 @@ export default function KioskGlobalEngine() {
         }
         if (scheduledAction === 'clock_in') {
           try {
-            const res = await attendanceService.clockIn({
+            const clockInFn = isKioskMode
+              ? (dto) => attendanceService.kioskClockIn(dto, kioskToken)
+              : attendanceService.clockIn.bind(attendanceService);
+            const res = await clockInFn({
               companyId,
               employeeId,
               source: 'kiosk',
@@ -440,7 +482,10 @@ export default function KioskGlobalEngine() {
           }
         } else {
           try {
-            const res = await attendanceService.clockOut({
+            const clockOutFn = isKioskMode
+              ? (dto) => attendanceService.kioskClockOut(dto, kioskToken)
+              : attendanceService.clockOut.bind(attendanceService);
+            const res = await clockOutFn({
               companyId,
               employeeId,
               notes: `Kiosque (plage sortie) — ${(person.similarity * 100).toFixed(1)}%`,
@@ -482,10 +527,17 @@ export default function KioskGlobalEngine() {
         }
         const softAction = softSlots?.length ? pickKioskActionForNow(softSlots, new Date()) : null;
 
+        const clockInBase = isKioskMode
+          ? (dto) => attendanceService.kioskClockIn(dto, kioskToken)
+          : attendanceService.clockIn.bind(attendanceService);
+        const clockOutBase = isKioskMode
+          ? (dto) => attendanceService.kioskClockOut(dto, kioskToken)
+          : attendanceService.clockOut.bind(attendanceService);
+
         if (softAction === 'clock_out') {
           // Créneau "Sortie" détecté → effectuer la sortie directement
           try {
-            const res = await attendanceService.clockOut({
+            const res = await clockOutBase({
               companyId,
               employeeId,
               notes: `Kiosque automatique (créneau sortie) — ${(person.similarity * 100).toFixed(1)}% confiance`,
@@ -505,7 +557,7 @@ export default function KioskGlobalEngine() {
         } else {
           // Créneau "Entrée" ou aucun créneau → clockIn avec bascule sur clockOut si 409
           try {
-            const res = await attendanceService.clockIn({
+            const res = await clockInBase({
               companyId,
               employeeId,
               source: 'kiosk',
@@ -516,7 +568,7 @@ export default function KioskGlobalEngine() {
           } catch (clockInErr) {
             if (clockInErr?.response?.status === 409 || clockInErr?.response?.status === 400) {
               try {
-                const res = await attendanceService.clockOut({
+                const res = await clockOutBase({
                   companyId,
                   employeeId,
                   notes: 'Kiosque automatique — sortie',
@@ -550,6 +602,8 @@ export default function KioskGlobalEngine() {
     }
   }, [
     isLoggedIn,
+    isKioskMode,
+    kioskToken,
     kioskActive,
     isRecognizing,
     videoConnected,
@@ -592,7 +646,7 @@ export default function KioskGlobalEngine() {
     return pickKioskActionForNow(def, currentTime);
   }, [kioskAttendance, currentTime]);
 
-  if (!isLoggedIn) return null;
+  if (!isLoggedIn && !isKioskMode) return null;
 
   const renderStartButton = (className) => (
     <button

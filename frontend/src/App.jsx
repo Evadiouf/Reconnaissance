@@ -6,6 +6,7 @@ import { KioskSessionProvider } from './contexts/KioskSessionContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
+import KioskRoute from './components/KioskRoute';
 import KioskGlobalEngine from './components/KioskGlobalEngine';
 import './App.css';
 
@@ -111,8 +112,8 @@ function App() {
         <Route path="/suivi-presences" element={<ProtectedRoute><SuiviPresences /></ProtectedRoute>} />
         <Route path="/mon-profil" element={<ProtectedRoute><MonProfil /></ProtectedRoute>} />
         <Route path="/profil" element={<ProtectedRoute><MonProfil /></ProtectedRoute>} />
-        {/* Page kiosque automatique — plein écran, pour le PC à l'entrée du bâtiment */}
-        <Route path="/kiosque" element={<ProtectedRoute><Kiosque /></ProtectedRoute>} />
+        {/* Page kiosque automatique — accessible avec JWT ou token kiosque */}
+        <Route path="/kiosque" element={<KioskRoute><Kiosque /></KioskRoute>} />
         <Route path="/kiosque-config" element={<ProtectedRoute><KiosqueSettings /></ProtectedRoute>} />
         <Route 
           path="/maintenance/visages" 

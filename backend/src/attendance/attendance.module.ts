@@ -8,6 +8,7 @@ import { AttendanceController } from './attendance.controller';
 import { CompanySubscriptionsModule } from '../company-subscriptions/company-subscriptions.module';
 import { CompaniesModule } from '../companies/companies.module';
 import { SubscriptionActiveGuard } from '../auth/guards/subscription-active.guard';
+import { KioskAuthModule } from '../auth/kiosk-auth.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SubscriptionActiveGuard } from '../auth/guards/subscription-active.guar
     ]),
     CompanySubscriptionsModule,
     CompaniesModule,
+    KioskAuthModule,
   ],
   controllers: [AttendanceController],
   providers: [AttendanceService, SubscriptionActiveGuard],

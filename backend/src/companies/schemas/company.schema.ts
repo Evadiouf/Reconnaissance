@@ -45,6 +45,13 @@ export class Company extends Document {
   @Prop({ trim: true, default: 'Actif' })
   status?: string;
 
+  /** Token kiosque long-durée (stocké en hash SHA-256). Jamais exposé en clair. */
+  @Prop({ trim: true })
+  kioskToken?: string;
+
+  @Prop()
+  kioskTokenCreatedAt?: Date;
+
   /**
    * Pointage automatique kiosque (optionnel).
    * defaultSlots = tous les employés sans override actif.

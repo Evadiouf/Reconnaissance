@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { SubscriptionActiveGuard } from '../auth/guards/subscription-active.guard';
+import { KioskTokenGuard } from '../auth/guards/kiosk-token.guard';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { QueryMyDto } from './dto/query-my.dto';
@@ -94,6 +95,26 @@ export class AttendanceController {
     }
 
     return this.attendance.clockOut(loggedInUserId, dto.companyId, dto);
+  }
+
+  /** Entrée kiosque — authentifié par token kiosque (pas de JWT) */
+  @UseGuards(KioskTokenGuard)
+  @Post('kiosk-clock-in')
+  @Version('1')
+  @HttpCode(HttpStatus.CREATED)
+  async kioskClockIn(@Request() req: any, @Body() dto: ClockInDto) {
+    if (!dto.employeeId) throw new BadRequestException('employeeId requis pour le pointage kiosque');
+    return this.attendance.clockIn(dto.employeeId, dto.companyId, dto);
+  }
+
+  /** Sortie kiosque — authentifié par token kiosque (pas de JWT) */
+  @UseGuards(KioskTokenGuard)
+  @Post('kiosk-clock-out')
+  @Version('1')
+  @HttpCode(HttpStatus.OK)
+  async kioskClockOut(@Request() req: any, @Body() dto: ClockOutDto) {
+    if (!dto.employeeId) throw new BadRequestException('employeeId requis pour le pointage kiosque');
+    return this.attendance.clockOut(dto.employeeId, dto.companyId, dto);
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard, SubscriptionActiveGuard)

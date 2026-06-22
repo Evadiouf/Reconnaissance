@@ -4,6 +4,7 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { InviteRHDto } from './dto/invite-rh.dto';
 import { UpdateKioskAttendanceDto } from './dto/update-kiosk-attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { KioskTokenGuard } from '../auth/guards/kiosk-token.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
@@ -63,6 +64,37 @@ export class CompaniesController {
       req.user.roles || [],
       dto,
     );
+  }
+
+  /** Infos entreprise accessibles sans JWT — pour le kiosque autonome */
+  @UseGuards(KioskTokenGuard)
+  @Get('kiosk-company-info')
+  @Version('1')
+  async getKioskCompanyInfo(@Request() req: any) {
+    return this.companiesService.getKioskCompanyInfo(req.kioskCompanyId);
+  }
+
+  /** Statut du token kiosque (a-t-on un token actif, depuis quand) */
+  @Get('my-company/kiosk-token')
+  @Version('1')
+  async getKioskTokenStatus(@Request() req: any) {
+    return this.companiesService.getKioskTokenStatus(req.user.userId);
+  }
+
+  /** Génère un nouveau token kiosque — invalide l'ancien immédiatement */
+  @Post('my-company/kiosk-token')
+  @Version('1')
+  @HttpCode(HttpStatus.CREATED)
+  async generateKioskToken(@Request() req: any) {
+    return this.companiesService.generateKioskToken(req.user.userId, req.user.roles || []);
+  }
+
+  /** Révoque le token kiosque actuel */
+  @Delete('my-company/kiosk-token')
+  @Version('1')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async revokeKioskToken(@Request() req: any) {
+    await this.companiesService.revokeKioskToken(req.user.userId, req.user.roles || []);
   }
 
   @Post('invite-rh')

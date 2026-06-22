@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { randomBytes, createHash } from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -445,6 +446,101 @@ export class CompaniesService {
       _id: (company as any)._id.toString(),
       name: (company as any).name,
       kioskAttendance: (company as any).kioskAttendance,
+    };
+  }
+
+  async generateKioskToken(userId: string, roles: string[]): Promise<{ token: string; createdAt: Date }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const company = await this.companyModel
+      .findOne({ $or: [{ owner: userObjectId }, { employees: userObjectId }] })
+      .exec();
+
+    if (!company) throw new NotFoundException('Aucune entreprise associée à votre compte');
+
+    if (!this.canManageKiosk(company as any, userId, roles)) {
+      throw new ForbiddenException('Seul le propriétaire ou un RH peut générer le token kiosque');
+    }
+
+    const raw = `sk_kiosk_${randomBytes(32).toString('hex')}`;
+    const hash = createHash('sha256').update(raw).digest('hex');
+    const createdAt = new Date();
+
+    (company as any).kioskToken = hash;
+    (company as any).kioskTokenCreatedAt = createdAt;
+    await company.save();
+
+    return { token: raw, createdAt };
+  }
+
+  async revokeKioskToken(userId: string, roles: string[]): Promise<void> {
+    const userObjectId = new Types.ObjectId(userId);
+    const company = await this.companyModel
+      .findOne({ $or: [{ owner: userObjectId }, { employees: userObjectId }] })
+      .exec();
+
+    if (!company) throw new NotFoundException('Aucune entreprise associée à votre compte');
+
+    if (!this.canManageKiosk(company as any, userId, roles)) {
+      throw new ForbiddenException('Seul le propriétaire ou un RH peut révoquer le token kiosque');
+    }
+
+    (company as any).kioskToken = undefined;
+    (company as any).kioskTokenCreatedAt = undefined;
+    await company.save();
+  }
+
+  async getKioskCompanyInfo(companyId: string): Promise<{
+    companyId: string;
+    companyName: string;
+    kioskAttendance: Record<string, unknown> | null;
+    employees: Array<{ id: string; department: string; firstName: string; lastName: string }>;
+  }> {
+    const company = await this.companyModel
+      .findById(companyId)
+      .populate('owner', '_id firstName lastName department')
+      .populate('employees', '_id firstName lastName department')
+      .lean();
+
+    if (!company) throw new NotFoundException('Entreprise introuvable');
+
+    const toEntry = (u: any) => ({
+      id: u._id.toString(),
+      firstName: u.firstName || '',
+      lastName: u.lastName || '',
+      department: u.department || '',
+    });
+
+    const users: any[] = [];
+    if (company.owner) users.push(company.owner);
+    users.push(...(Array.isArray(company.employees) ? company.employees : []));
+
+    const seen = new Set<string>();
+    const employees = users.reduce<any[]>((acc, u) => {
+      const id = u?._id?.toString();
+      if (id && !seen.has(id)) { seen.add(id); acc.push(toEntry(u)); }
+      return acc;
+    }, []);
+
+    return {
+      companyId,
+      companyName: (company as any).name,
+      kioskAttendance: (company as any).kioskAttendance ?? null,
+      employees,
+    };
+  }
+
+  async getKioskTokenStatus(userId: string): Promise<{ hasToken: boolean; createdAt?: Date }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const company = await this.companyModel
+      .findOne({ $or: [{ owner: userObjectId }, { employees: userObjectId }] })
+      .select('kioskToken kioskTokenCreatedAt')
+      .lean();
+
+    if (!company) throw new NotFoundException('Aucune entreprise associée à votre compte');
+
+    return {
+      hasToken: !!(company as any).kioskToken,
+      createdAt: (company as any).kioskTokenCreatedAt,
     };
   }
 }

@@ -35,6 +35,66 @@ export default function KiosqueSettings() {
   ]);
   const [teamOverrides, setTeamOverrides] = useState([]);
 
+  // --- Token kiosque ---
+  const [tokenStatus, setTokenStatus] = useState(null);     // { hasToken, createdAt }
+  const [tokenLoading, setTokenLoading] = useState(true);
+  const [newToken, setNewToken] = useState(null);           // affiché une seule fois après génération
+  const [tokenError, setTokenError] = useState(null);
+  const [revokeConfirm, setRevokeConfirm] = useState(false);
+  const [tokenActing, setTokenActing] = useState(false);
+
+  const kioskUrl = newToken
+    ? `${window.location.origin}/kiosque?kiosk_token=${newToken}`
+    : null;
+
+  const loadTokenStatus = useCallback(async () => {
+    setTokenLoading(true);
+    try {
+      const status = await companiesService.getKioskTokenStatus();
+      setTokenStatus(status);
+    } catch {
+      setTokenStatus(null);
+    } finally {
+      setTokenLoading(false);
+    }
+  }, []);
+
+  const handleGenerateToken = async () => {
+    setTokenActing(true);
+    setTokenError(null);
+    setNewToken(null);
+    setRevokeConfirm(false);
+    try {
+      const res = await companiesService.generateKioskToken();
+      setNewToken(res.token);
+      await loadTokenStatus();
+    } catch (e) {
+      setTokenError(e.response?.data?.message || 'Erreur lors de la génération du token');
+    } finally {
+      setTokenActing(false);
+    }
+  };
+
+  const handleRevokeToken = async () => {
+    setTokenActing(true);
+    setTokenError(null);
+    try {
+      await companiesService.revokeKioskToken();
+      setNewToken(null);
+      setRevokeConfirm(false);
+      await loadTokenStatus();
+    } catch (e) {
+      setTokenError(e.response?.data?.message || 'Erreur lors de la révocation');
+    } finally {
+      setTokenActing(false);
+    }
+  };
+
+  const copyUrl = () => {
+    if (!kioskUrl) return;
+    navigator.clipboard.writeText(kioskUrl).catch(() => {});
+  };
+
   const applyKioskAttendanceToForm = useCallback((ka) => {
     if (!ka) {
       setEnabled(false);
@@ -79,7 +139,8 @@ export default function KiosqueSettings() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadTokenStatus();
+  }, [load, loadTokenStatus]);
 
   const save = async () => {
     setSaving(true);
@@ -124,7 +185,114 @@ export default function KiosqueSettings() {
           </div>
         </header>
 
-        <main className="flex-1 p-8 max-w-4xl">
+        <main className="flex-1 p-8 max-w-4xl space-y-6">
+
+          {/* ── Section Token Kiosque ── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm space-y-5 [color-scheme:light]">
+            <div>
+              <h2 className="text-lg font-semibold text-[#002222]">Accès kiosque automatique</h2>
+              <p className="text-sm text-gray-700 mt-1">
+                Générez un token permanent pour que le PC kiosque démarre sans connexion manuelle.
+                Le token s'ajoute à l'URL d'auto-démarrage dans le fichier <code className="bg-gray-100 px-1 rounded text-xs">.desktop</code>.
+              </p>
+            </div>
+
+            {tokenLoading ? (
+              <p className="text-sm text-gray-500">Chargement…</p>
+            ) : (
+              <>
+                {/* Statut actuel */}
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                  tokenStatus?.hasToken
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-amber-50 border-amber-200'
+                }`}>
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${tokenStatus?.hasToken ? 'bg-green-500' : 'bg-amber-400'}`} />
+                  <div>
+                    {tokenStatus?.hasToken ? (
+                      <>
+                        <p className="text-sm font-semibold text-green-800">Token actif</p>
+                        {tokenStatus.createdAt && (
+                          <p className="text-xs text-green-700">
+                            Généré le {new Date(tokenStatus.createdAt).toLocaleDateString('fr-FR', {
+                              day: 'numeric', month: 'long', year: 'numeric',
+                            })}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm font-semibold text-amber-800">Aucun token actif — le kiosque nécessite une connexion manuelle</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Token affiché une seule fois après génération */}
+                {newToken && kioskUrl && (
+                  <div className="bg-[#002222] rounded-xl p-5 space-y-3">
+                    <p className="text-sm font-semibold text-amber-300">
+                      Copiez cette URL maintenant — elle ne sera plus affichée en clair.
+                    </p>
+                    <p className="text-xs text-gray-300 font-mono break-all leading-relaxed">{kioskUrl}</p>
+                    <button
+                      onClick={copyUrl}
+                      className="px-4 py-2 bg-[#0389A6] text-white text-sm rounded-lg hover:bg-[#027A94] font-medium"
+                    >
+                      Copier l'URL
+                    </button>
+                    <p className="text-xs text-gray-400">
+                      Collez cette URL dans le fichier <code>.desktop</code> sur le champ <code>Exec=</code>, après l'URL du navigateur.
+                    </p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleGenerateToken}
+                    disabled={tokenActing}
+                    className="px-5 py-2.5 bg-[#0389A6] text-white rounded-xl text-sm font-medium hover:bg-[#027A94] disabled:opacity-50"
+                  >
+                    {tokenActing ? 'Génération…' : tokenStatus?.hasToken ? 'Régénérer le token' : 'Générer le token kiosque'}
+                  </button>
+
+                  {tokenStatus?.hasToken && !revokeConfirm && (
+                    <button
+                      onClick={() => setRevokeConfirm(true)}
+                      disabled={tokenActing}
+                      className="px-5 py-2.5 border border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Révoquer
+                    </button>
+                  )}
+
+                  {revokeConfirm && (
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+                      <span className="text-sm text-red-700 font-medium">Déconnectera le kiosque immédiatement.</span>
+                      <button
+                        onClick={handleRevokeToken}
+                        disabled={tokenActing}
+                        className="px-3 py-1 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50"
+                      >
+                        Confirmer
+                      </button>
+                      <button
+                        onClick={() => setRevokeConfirm(false)}
+                        className="px-3 py-1 text-gray-600 text-sm hover:underline"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {tokenError && (
+                  <p className="text-sm text-red-600">{tokenError}</p>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── Section Configuration Plages Horaires ── */}
           {loading ? (
             <p className="text-gray-900 font-medium">Chargement…</p>
           ) : (

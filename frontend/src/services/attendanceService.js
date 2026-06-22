@@ -7,6 +7,8 @@ const ATTENDANCE_DASHBOARD_ENDPOINT = '/api/v1/attendance/dashboard';
 const ATTENDANCE_DASHBOARD_HISTORY_ENDPOINT = '/api/v1/attendance/dashboard/history';
 const CLOCK_IN_ENDPOINT = '/api/v1/attendance/clock-in';
 const CLOCK_OUT_ENDPOINT = '/api/v1/attendance/clock-out';
+const KIOSK_CLOCK_IN_ENDPOINT = '/api/v1/attendance/kiosk-clock-in';
+const KIOSK_CLOCK_OUT_ENDPOINT = '/api/v1/attendance/kiosk-clock-out';
 
 const normalizeAttendanceEvent = (event = {}) => {
   if (!event || typeof event !== 'object') {
@@ -198,7 +200,25 @@ export const attendanceService = {
     const response = await apiClient.post(CLOCK_OUT_ENDPOINT, payload);
     window.dispatchEvent(new CustomEvent('attendanceUpdated', { detail: { action: 'clock-out' } }));
     return response.data;
-  }
+  },
+
+  async kioskClockIn({ companyId, employeeId, source, notes }, kioskToken) {
+    const payload = { companyId, employeeId, ...(source && { source }), ...(notes && { notes }) };
+    const response = await apiClient.post(KIOSK_CLOCK_IN_ENDPOINT, payload, {
+      headers: { 'x-kiosk-token': kioskToken },
+    });
+    window.dispatchEvent(new CustomEvent('attendanceUpdated', { detail: { action: 'clock-in' } }));
+    return response.data;
+  },
+
+  async kioskClockOut({ companyId, employeeId, notes }, kioskToken) {
+    const payload = { companyId, employeeId, ...(notes && { notes }) };
+    const response = await apiClient.post(KIOSK_CLOCK_OUT_ENDPOINT, payload, {
+      headers: { 'x-kiosk-token': kioskToken },
+    });
+    window.dispatchEvent(new CustomEvent('attendanceUpdated', { detail: { action: 'clock-out' } }));
+    return response.data;
+  },
 };
 
 export default attendanceService;
