@@ -44,7 +44,7 @@ export default function KioskGlobalEngine() {
       return localStorage.getItem('kioskToken') || null;
     } catch { return null; }
   });
-  const isKioskMode = !!kioskToken && !isLoggedIn;
+  const isKioskMode = !!kioskToken;
   const isKioskRoute = location.pathname === '/kiosque';
 
   const { kioskActive, startKiosk, stopKiosk, setKioskRunning, userPausedKioskRef } = useKioskSession();
